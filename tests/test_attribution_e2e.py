@@ -195,7 +195,7 @@ def test_cross_agent_rewrite_end_to_end(
     main(["report", str(crossed["repo"]), *db])
     text = capsys.readouterr().out
     assert text.index("Attribution coverage") < text.index("Attributed lines")
-    assert "verified lines: 3 of 4 (75%)" in text
+    assert "inserted lines verified: 3 of 4 (75%)" in text
     assert "later removed, by: other_agent 1" in text
 
 
@@ -269,7 +269,7 @@ def test_explain_shows_both_edits_from_their_logs(
     assert main(["explain", ident[:6], str(crossed["repo"]), *db]) == ExitCode.OK
     text = capsys.readouterr().out
     assert "rewrite · verified · m.py line 2" in text
-    assert "codex changed 1 line(s) that claude_code wrote" in text
+    assert "Codex changed 1 line(s) that Claude Code wrote" in text
     assert "+    return 1" in text and "-    return 1" in text and "+    return 2" in text
     assert main(["explain", ident, str(crossed["repo"]), *db, "--format", "json"]) == ExitCode.OK
     detail = json.loads(capsys.readouterr().out)

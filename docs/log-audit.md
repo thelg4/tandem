@@ -113,7 +113,7 @@ Run 2026-10-17 with schema v2. The 13 Codex rollouts were scanned against empty 
 | --- | --- |
 | Codex edits placed in a repository | 357 of 357, each in exactly one repository |
 | Edits made outside the session's working directory | 251, from one session working in a different folder; placed in the repository actually edited |
-| Claude Code edits to this repository | 61, all reconstructable from the log |
+| Claude Code edits to this repository | 61, all reconstructable from the log (the transcript had grown since the adapter check above, which saw 56) |
 | Full scan, 13 rollouts (36 MB) | about 0.6 s per repository |
 | Rescan with nothing changed | about 0.14 s |
 
@@ -128,7 +128,7 @@ Run 2026-10-17 on a personal project (66 first-parent commits over two months) o
 | Logs read | 144 Claude Code, 13 Codex; no malformed records |
 | Codex edits placed | 251, from one session started in a different folder |
 | Verified lines | 3,943 of 25,159 inserted lines (16%); 802 more supported |
-| Codex survival at 5 commits | 3,798 / 3,943 = 96.3%; later removals were by the same session (605 lines) or unattributed changes (183) |
+| Codex survival at 5 commits | 3,798 / 3,943 = 96.3%. Over the whole history, 605 Codex lines were later removed by the same session and 183 by unattributed changes; only 145 of those removals happened within 5 commits of the line landing |
 | Claude Code sessions in the project | 0 |
 
 The project had been built with both agents, but no Claude Code transcript for it survived: Claude Code deletes transcripts after 30 days by default (`cleanupPeriodDays`), and the project's last commit was older than the oldest remaining transcript. That is why 81% of lines are unexplained. Tandem now warns when an agent's logs start after the analyzed history, and the README recommends raising the retention period.

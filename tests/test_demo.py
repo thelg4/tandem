@@ -14,12 +14,12 @@ def test_demo_finds_its_scripted_interactions(
 ) -> None:
     assert run(tmp_path / "demo") == 0
     out = capsys.readouterr().out
-    assert "codex changed claude_code's lines: exact_revert 1, partial_revert 1, rewrite 1" in out
+    assert "Codex changed Claude Code's lines: exact_revert 1, partial_revert 1, rewrite 1" in out
     assert "survival at 5: 33 / 43 = 76.7%" in out
     assert "exact revert rate: 1 / 4 = 25.0%" in out
-    assert "the later edit put back exactly the text the earlier edit replaced" in out
+    assert "the later edit removed exactly the lines the earlier edit added" in out
     # Every edit is placed and every agent line is verified.
-    assert "verified lines: 61 of 70 (87%) inserted" in out
+    assert "inserted lines verified: 61 of 70 (87%)" in out
 
 
 def test_demo_refuses_a_non_empty_directory(tmp_path: Path) -> None:

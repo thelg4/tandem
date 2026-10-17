@@ -136,11 +136,19 @@ def _distance(d: int | None) -> str:
     return "before any commit" if d is None else f"{d} commit(s) later"
 
 
+AGENT_NAMES = {"claude_code": "Claude Code", "codex": "Codex"}
+
+
+def agent_name(family: str) -> str:
+    """Display name for an agent family; filters and JSON keep the family ID."""
+    return AGENT_NAMES.get(family, family)
+
+
 def interaction_line(r: dict[str, Any]) -> str:
     return (
-        f"{r['interaction_id']}  {safe(r['path'])}:{r['start_line']}  "
-        f"{r['later']['agent']} -> {r['original']['agent']}'s lines  {r['label']}, "
-        f"{r['lines_affected']} line(s), {_distance(r['commit_distance'])}, "
+        f"{r['interaction_id']}  {safe(r['path'])}:{r['start_line']}  {r['label']}: "
+        f"{agent_name(r['later']['agent'])} changed {r['lines_affected']} of "
+        f"{agent_name(r['original']['agent'])}'s lines, {_distance(r['commit_distance'])}, "
         f"{r['evidence_class']}" + ("  [recent]" if r["recent"] else "")
     )
 
@@ -229,8 +237,8 @@ def render_explain(d: dict[str, Any]) -> str:
     lines = [
         f"Interaction {d['interaction_id']}  (rules {d['rule_version']})",
         f"  {d['label']} · {d['evidence_class']} · {safe(d['path'])} line {d['start_line']}",
-        f"  {d['later']['agent']} changed {d['lines_affected']} line(s) that "
-        f"{d['original']['agent']} wrote; {_distance(d['commit_distance'])}, "
+        f"  {agent_name(d['later']['agent'])} changed {d['lines_affected']} line(s) that "
+        f"{agent_name(d['original']['agent'])} wrote; {_distance(d['commit_distance'])}, "
         f"{_ago(d['elapsed_seconds'])}",
     ]
     if d["tags"]:
@@ -239,7 +247,7 @@ def render_explain(d: dict[str, Any]) -> str:
     for title, side in (("Earlier edit", "original"), ("Later edit", "later")):
         s = d[side]
         commit = (s["commit"] or "")[:12] or "not committed"
-        lines.append(f"{title}: {s['agent']} session {safe(s['session'] or '?')}")
+        lines.append(f"{title}: {agent_name(s['agent'])} session {safe(s['session'] or '?')}")
         lines.append(f"  {s['tool'] or '?'} at {s['time'] or 'unknown time'}; commit {commit}")
         lines.append(f"  evidence: {s['evidence_source']}, linked to tool call by {s['call_link']}")
         lines.append(f"  log: {safe(s['log']['path'])} @ byte {s['log']['byte_offset']}")
@@ -250,7 +258,9 @@ def render_explain(d: dict[str, Any]) -> str:
         f"  later edit replaced {ch['later_removed']} line(s) with {ch['later_inserted']} "
         f"at line {d['start_line']}",
     ]
-    if d["label"] == "exact_revert":
+    if d["label"] == "exact_revert" and not ch["original_replaced"]:
+        lines.append("  the later edit removed exactly the lines the earlier edit added")
+    elif d["label"] == "exact_revert":
         lines.append("  the later edit put back exactly the text the earlier edit replaced")
     elif d["label"] == "partial_revert":
         lines.append("  the later edit put back part of the text the earlier edit replaced")

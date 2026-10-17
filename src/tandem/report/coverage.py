@@ -18,7 +18,7 @@ from typing import Any
 
 from tandem.report.durability import durability, durability_section
 from tandem.report.json_report import redact_path
-from tandem.report.views import interaction_line, interaction_rows, summarize
+from tandem.report.views import agent_name, interaction_line, interaction_rows, summarize
 
 CAVEATS = (
     "A line is attributed to an agent only when its edit is reconstructed exactly from the "
@@ -446,7 +446,7 @@ def render_text(cov: Coverage, *, head: str | None = None, filters: Filters | No
         lines.append(f"  {att['commits_analyzed']} first-parent commit(s) analyzed {start}")
         inserted = att["inserted_lines_in_range"]
         classes = att["attributed_lines_by_class"]
-        lines.append(f"  verified lines: {_pct(classes.get('verified', 0), inserted)} inserted")
+        lines.append(f"  inserted lines verified: {_pct(classes.get('verified', 0), inserted)}")
         others = {k: v for k, v in classes.items() if k != "verified"}
         if others:
             lines.append(f"  also attributed: {_fmt_counts(others)}")
@@ -536,7 +536,11 @@ def _interaction_section(cov: Coverage) -> list[str]:
             f"{summary.get('recent', 0)} recent)"
         )
         for direction, labels in sorted(summary.get("by_direction", {}).items()):
-            lines.append(f"  {direction}'s lines: {_fmt_counts(labels)}")
+            later, _, original = direction.partition(" changed ")
+            lines.append(
+                f"  {agent_name(later)} changed {agent_name(original)}'s lines: "
+                f"{_fmt_counts(labels)}"
+            )
     if summary.get("lower_evidence"):
         lines.append(
             f"  supported evidence only, not in the counts above: {summary['lower_evidence']}"

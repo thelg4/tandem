@@ -25,7 +25,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Version Control :: Git",
 ]
-# Core scan/report keeps dependencies at zero; presentation extras are optional.
+# No runtime dependencies.
 dependencies = []
 
 [project.urls]
@@ -34,7 +34,6 @@ Documentation = "https://github.com/thelg4/tandem/tree/main/docs"
 Issues = "https://github.com/thelg4/tandem/issues"
 
 [project.optional-dependencies]
-rich = ["rich>=13"]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 
 [project.scripts]
