@@ -38,6 +38,7 @@ BOOKKEEPING = frozenset(
         "summary",
         "system",
         "file-history-snapshot",
+        "pr-link",
     }
 )
 USAGE_FIELDS = {

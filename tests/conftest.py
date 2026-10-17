@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import FIXTURES
+
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
@@ -77,3 +79,20 @@ def repo_with_history(git_repo: tuple[Path, GitRunner]) -> tuple[Path, list[str]
         git("commit", "-q", "-m", f"commit {i}")
         commits.append(git("rev-parse", "HEAD"))
     return repo, commits
+
+
+def _copy_logs(dest: Path, agent_dir: str, repo: Path) -> None:
+    """Copy fixture logs, rewriting the synthetic /work/demo working directory to ``repo``."""
+    for src in (FIXTURES / agent_dir).rglob("*.jsonl"):
+        out = dest / src.relative_to(FIXTURES / agent_dir)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(src.read_text().replace("/work/demo", str(repo)))
+
+
+@pytest.fixture
+def env(repo_with_history: tuple[Path, list[str]], tmp_path: Path) -> dict[str, Path]:
+    repo, _ = repo_with_history
+    claude, codex = tmp_path / "logs" / "claude", tmp_path / "logs" / "codex"
+    _copy_logs(claude, "claude_code", repo)
+    _copy_logs(codex, "codex", repo)
+    return {"repo": repo, "claude": claude, "codex": codex, "db": tmp_path / "t.sqlite3"}

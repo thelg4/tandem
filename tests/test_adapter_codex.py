@@ -105,7 +105,7 @@ def test_subagent_skips_copied_parent_history() -> None:
 def test_subagent_session_has_parent() -> None:
     events, _ = parse("codex/0.153-subagent/rollout.jsonl")
     actor = events[0].actor
-    assert actor.session_id == "codex:cx-thread-0001"
+    assert actor.session_id == "codex:cx-thread-0153"
     assert actor.parent_session_id == "codex:cx-thread-parent"
 
 

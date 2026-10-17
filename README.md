@@ -6,7 +6,7 @@ Tandem is a local-first analysis tool for developers who run Claude Code and Cod
 
 The repository is the unit of analysis, not the session. Every finding links back to the transcript events and Git revisions that support it.
 
-> **Status: pre-alpha.** Log reading and both agent parsers work: Tandem can read Claude Code and Codex logs and recover each agent's file edits. Attribution against Git history, interaction detection, and metrics are not implemented yet. `tandem doctor` and `tandem audit` work today; `scan`, `report`, `session`, and `explain` are stubs that exit with a "not implemented" message.
+> **Status: pre-alpha.** `tandem scan` reads Claude Code and Codex logs, places each agent's edits in the repository, and stores them locally; `tandem report` shows that coverage, including files both agents edited. Matching edits to Git history (attribution), interaction detection, and durability metrics are not implemented yet, so the report shows observed edits, not surviving lines. `session` and `explain` are still stubs.
 
 ## Why
 
