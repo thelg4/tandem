@@ -1,6 +1,6 @@
 """Command-line interface.
 
-Commands: audit, scan, report, session, explain, doctor.
+Commands: audit, scan, report, session, explain, doctor, demo.
 Exit codes: 0 ok (including a marked partial report), 2 invalid input, 3 unavailable
 data, 4 processing failure. Code 1 marks a command not implemented in this build.
 """
@@ -285,6 +285,12 @@ def cmd_explain(args: argparse.Namespace) -> int:
     return int(ExitCode.OK)
 
 
+def cmd_demo(args: argparse.Namespace) -> int:
+    from tandem.demo import run
+
+    return run(Path(args.keep) if args.keep else None)
+
+
 # -- parser ---------------------------------------------------------------------------
 
 
@@ -370,6 +376,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=["text", "json"], default="text")
     p.add_argument("--db", metavar="FILE", help="use this database instead of the default")
     p.set_defaults(func=cmd_explain)
+
+    p = sub.add_parser(
+        "demo", help="run on a synthetic repository with invented Claude Code and Codex logs"
+    )
+    p.add_argument("--keep", metavar="DIR", help="build the demo in DIR and keep it")
+    p.set_defaults(func=cmd_demo)
 
     return parser
 
