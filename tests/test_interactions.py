@@ -148,3 +148,93 @@ def test_ids_are_stable_across_runs(tmp_path: Path) -> None:
     assert [i.interaction_id for i in interactions(s)] == [
         i.interaction_id for i in interactions(s)
     ]
+
+
+# -- Regressions from the second independent review --------------------------------------
+
+
+def test_removal_undone_by_unlogged_change_then_later_edit_is_not_an_interaction(
+    tmp_path: Path,
+) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "x\nL\nz\n")
+    s.commit()
+    a = s.claude("a", "m.py", "x\nL2\nz\n")
+    s.commit()
+    s.codex("b", "m.py", "x\nz\n")  # removal, not committed
+    s.human("m.py", "x\nL2\nz\n")  # discarded on disk, unlogged
+    s.claude("c", "m.py", "X\nL2\nz\n")  # logs the restored state as its before-state
+    s.commit()
+    assert interactions(s) == []
+    r = s.run()
+    assert sum(x.count for x in r.spans if x.state == "present" and x.origin.edit_id == a) == 1
+
+
+def test_uncommitted_removal_undone_before_commit_is_not_an_interaction(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "x\n")
+    s.commit()
+    a = s.claude("a", "m.py", "x\nL\n")
+    s.codex("b", "m.py", "x\n")
+    s.human("m.py", "x\nL\n")  # undone by hand before committing
+    s.commit()
+    assert interactions(s) == []
+    r = s.run()
+    assert sum(x.count for x in r.spans if x.state == "present" and x.origin.edit_id == a) == 1
+
+
+def test_same_text_elsewhere_does_not_hide_a_removal(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "x\ny\n")
+    s.commit()
+    a = s.claude("a", "m.py", "x\nDUP\ny\n")
+    s.commit()
+    s.codex("b", "m.py", "x\ny\n")
+    s.human("m.py", "x\ny\nDUP\n")  # same text appended elsewhere, unlogged
+    s.commit()
+    (only,) = interactions(s)
+    assert only.label is L.EXACT_REVERT
+    r = s.run()
+    assert not [x for x in r.spans if x.state == "present" and x.origin.edit_id == a]
+
+
+def test_partial_revert_needs_a_contiguous_meaningful_restoration(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "a\n\nb\n")
+    s.commit()
+    s.claude("a", "m.py", "A1\nA2\nA3\n")
+    s.commit()
+    s.codex("b", "m.py", "\n")  # only a blank line, which happened to be in the old text
+    s.commit()
+    assert all(i.label is not L.PARTIAL_REVERT for i in interactions(s))
+
+
+def test_one_later_change_over_one_sessions_edits_is_one_interaction(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "x\nz\n")
+    s.commit()
+    s.claude("a", "m.py", "x\nA1\nA2\nz\n")
+    s.claude("a", "m.py", "x\nA1\nA2b\nz\n")  # same session tweaks its own line
+    s.commit()
+    s.codex("b", "m.py", "x\nz\n")
+    s.commit()
+    (only,) = interactions(s)
+    assert only.lines_affected == 2 and only.label is L.REMOVAL
+
+
+def test_headline_counts_verified_only() -> None:
+    from tandem.report.views import summarize
+
+    def row(evidence: str, label: str = "rewrite") -> dict[str, object]:
+        return {
+            "label": label,
+            "evidence_class": evidence,
+            "lines_affected": 1,
+            "recent": False,
+            "original": {"agent": "claude_code"},
+            "later": {"agent": "codex"},
+        }
+
+    summary = summarize([row("verified"), row("supported"), row("ambiguous", "overlap_candidate")])
+    assert summary["cross_agent"] == 1
+    assert summary["lower_evidence"] == 1 and summary["overlap_candidates"] == 1

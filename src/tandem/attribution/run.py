@@ -175,7 +175,11 @@ def run_attribution(
         verified_lines=verified,
         inserted_lines=result.inserted_lines_in_range + untracked,
         cross_agent_interactions=sum(
-            1 for i in found if i.cross_agent and i.label is not InteractionLabel.OVERLAP_CANDIDATE
+            1
+            for i in found
+            if i.cross_agent
+            and i.label is not InteractionLabel.OVERLAP_CANDIDATE
+            and i.evidence is EvidenceClass.VERIFIED
         ),
     )
 

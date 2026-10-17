@@ -96,20 +96,34 @@ def _label(later: Block, earlier: Block | None, removed_all_of_earlier: bool) ->
         and later.new == earlier.old
     ):
         return InteractionLabel.EXACT_REVERT
-    if earlier is not None and later.new and all(t in earlier.old for t in later.new):
+    if earlier is not None and _restores_part(later.new, earlier.old):
         return InteractionLabel.PARTIAL_REVERT
     return InteractionLabel.REMOVAL if not later.new else InteractionLabel.REWRITE
 
 
+def _restores_part(new: tuple[str, ...], old: tuple[str, ...]) -> bool:
+    """``new`` is a contiguous run of ``old`` with at least one non-blank line."""
+    if not new or not any(t.strip() for t in new):
+        return False
+    width = len(new)
+    return any(old[i : i + width] == new for i in range(len(old) - width + 1))
+
+
 def derive(result: Result, edits: dict[str, AttrEdit], window: Window) -> list[Interaction]:
+    # One interaction per (earlier session, later edit, later block): a later change over
+    # several edits from one session is one interaction, not one per edit.
     groups: dict[tuple[str, str, int | None], list[Touch]] = defaultdict(list)
     for touch in result.touches:
-        if touch.origin.edit_id is None:
+        if touch.origin.edit_id is None or touch.origin.session_id is None:
             continue
-        groups[(touch.origin.edit_id, touch.remover, touch.removal_block)].append(touch)
+        groups[(touch.origin.session_id, touch.remover, touch.removal_block)].append(touch)
 
     out: list[Interaction] = []
-    for (orig_id, later_id, block_id), touches in groups.items():
+    for (_session, later_id, block_id), touches in groups.items():
+        originals = [t.origin.edit_id for t in touches if t.origin.edit_id in edits]
+        if not originals:
+            continue
+        orig_id = min(originals, key=lambda i: (edits[i].time or 0.0, edits[i].order))
         a, e = edits.get(orig_id), edits.get(later_id)
         if a is None or e is None or (a.session_id == e.session_id):
             continue  # one session revising its own work is not an interaction
@@ -126,8 +140,9 @@ def derive(result: Result, edits: dict[str, AttrEdit], window: Window) -> list[I
         label = _label(later_block, earlier, removed_all)
 
         later_evidence = result.edits[later_id].evidence or EvidenceClass.UNKNOWN
-        origin_evidence = touches[0].origin.evidence
-        worst = max((origin_evidence, later_evidence), key=lambda c: _RANK.get(c, 3))
+        worst = max(
+            [t.origin.evidence for t in touches] + [later_evidence], key=lambda c: _RANK.get(c, 3)
+        )
         tags: list[str] = []
         if worst is EvidenceClass.AMBIGUOUS or _RANK.get(worst, 3) > 2:
             tags.append(label.value)  # keep the underlying shape visible

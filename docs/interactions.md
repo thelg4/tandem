@@ -10,7 +10,7 @@ An interaction is a later agent edit changing lines that an earlier edit from a 
 - Lines removed by an unexplained change (a hand edit, a formatter, a shell command) are not interactions; the report shows them as removed by an unattributed change.
 - A removal that is undone before the commit is not an interaction.
 
-One interaction covers one contiguous change by the later edit. A later edit that changes the earlier edit's lines in three places produces three interactions, each listing the lines it affected.
+One interaction covers one contiguous change by the later edit against one earlier session. A later edit that changes the earlier session's lines in three places produces three interactions; a later change that spans several edits from the same earlier session is one interaction. A removal only counts once it is settled at the next commit, so a removal undone in the same place before then is not an interaction.
 
 ## Labels
 
@@ -19,7 +19,7 @@ Every interaction has exactly one primary label, so headline counts never overla
 | Label | Rule |
 | --- | --- |
 | `exact_revert` | The later change removed exactly the lines the earlier change inserted and put back exactly the lines it replaced. Deleting an added block counts, since it restores the earlier state. |
-| `partial_revert` | The later change put back only text the earlier change replaced, but not an exact restoration. |
+| `partial_revert` | The later change put back a contiguous run of the text the earlier change replaced (with at least one non-blank line), but not an exact restoration. |
 | `removal` | The later change deleted the lines without a replacement. |
 | `rewrite` | The later change replaced the lines with something else. |
 | `overlap_candidate` | Either edit's evidence is ambiguous, so order or lineage is uncertain. The underlying shape is kept as a tag. Excluded from verified totals. |
@@ -28,7 +28,7 @@ Labels describe what changed, not intent or correctness. A rewrite may be an imp
 
 ## Evidence
 
-An interaction's evidence class is the weaker of the two edits' classes: verified only when both edits are verified.
+An interaction's evidence class is the weakest of the edits' classes: verified only when every edit involved is verified. Headline counts in the report include verified interactions only; supported ones are listed separately.
 
 ## Timing and the highlight window
 

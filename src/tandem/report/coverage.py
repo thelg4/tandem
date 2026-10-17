@@ -452,12 +452,16 @@ def _interaction_section(cov: Coverage) -> list[str]:
         lines.append("Cross-agent interactions: none (only one agent's edits are in this repo)")
     else:
         lines.append(
-            f"Cross-agent interactions: {summary.get('cross_agent', 0)} "
+            f"Cross-agent interactions (verified): {summary.get('cross_agent', 0)} "
             f"({summary.get('cross_agent_lines_affected', 0)} line(s) affected, "
             f"{summary.get('recent', 0)} recent)"
         )
         for direction, labels in sorted(summary.get("by_direction", {}).items()):
             lines.append(f"  {direction}'s lines: {_fmt_counts(labels)}")
+    if summary.get("lower_evidence"):
+        lines.append(
+            f"  supported evidence only, not in the counts above: {summary['lower_evidence']}"
+        )
     if summary.get("overlap_candidates"):
         lines.append(f"  overlap candidates, order uncertain: {summary['overlap_candidates']}")
     if summary.get("same_agent_cross_session"):

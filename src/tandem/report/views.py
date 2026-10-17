@@ -102,7 +102,9 @@ def _row_json(r: sqlite3.Row) -> dict[str, Any]:
 def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Headline counts. Each interaction has one primary label, so counts never overlap."""
     cross = [r for r in rows if r["original"]["agent"] != r["later"]["agent"]]
-    confirmed = [r for r in cross if r["label"] != "overlap_candidate"]
+    labelled = [r for r in cross if r["label"] != "overlap_candidate"]
+    # Headline counts are verified only; supported interactions are listed separately.
+    confirmed = [r for r in labelled if r["evidence_class"] == "verified"]
     directions: dict[str, dict[str, int]] = {}
     for r in confirmed:
         key = f"{r['later']['agent']} changed {r['original']['agent']}"
@@ -113,6 +115,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "cross_agent_lines_affected": sum(r["lines_affected"] for r in confirmed),
         "by_direction": directions,
         "recent": sum(1 for r in confirmed if r["recent"]),
+        "lower_evidence": len(labelled) - len(confirmed),
         "overlap_candidates": sum(1 for r in cross if r["label"] == "overlap_candidate"),
         "same_agent_cross_session": len(rows) - len(cross),
     }

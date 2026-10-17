@@ -165,13 +165,31 @@ class Result:
     commit_index: dict[str, int] = field(default_factory=dict)
 
 
+@dataclass(slots=True, eq=False)
+class _Tomb:
+    """A line removed from the working state, kept until the next commit settles it.
+
+    The removal is undone only if the same text is re-inserted in the same gap: right
+    after ``prev`` (or at the start of the file when None), before ``nxt`` or before
+    another removed line. Text-only matching elsewhere in the file does not count.
+    """
+
+    line: Line
+    remover: str | None
+    block: int | None
+    prev: Line | None
+    nxt: Line | None
+
+
 @dataclass(slots=True)
 class _File:
     committed: list[Line] | None
     working: list[Line] | None = None
     dirty: bool = False
-    pending: list[tuple[Line, str, int | None]] = field(default_factory=list)
-    """Committed lines an agent edit removed in the working state: (line, edit_id, block)."""
+    tombs: list[_Tomb] = field(default_factory=list)
+    """Lines removed from the working state since the last commit that touched the file."""
+    restored_by: set[str] = field(default_factory=set)
+    """Edits whose removals were undone before the next commit."""
     states: list[tuple[str, str | None]] = field(default_factory=list)
     """Digest of each working state with the session that produced it."""
     applied: list[str] = field(default_factory=list)
@@ -434,7 +452,7 @@ class Engine:
                 Block(e.edit_id, e.path, 0, tuple(ln.text for ln in removed), ())
             )
             for line in removed:
-                self._remove(e.path, state, line, e.edit_id, block)
+                state.tombs.append(_Tomb(line, e.edit_id, block, None, None))
             result.lines_removed += len(removed)
             new: list[Line] | None = None
         else:
@@ -508,21 +526,28 @@ class Engine:
                         tuple(new_texts[j1:j2]),
                     )
                 )
-            for line in old[i1:i2]:
-                self._remove(path, state, line, remover, block)
-            out.extend(Line(t, origin, block=block) for t in new_texts[j1:j2])
+            nxt = old[i2] if i2 < len(old) else None
+            prev = out[-1] if out else None
+            fresh = [_Tomb(ln, remover, block, prev, nxt) for ln in old[i1:i2]]
+            for text in new_texts[j1:j2]:
+                line = self._revive(state, text, out[-1] if out else None, nxt)
+                out.append(line or Line(text, origin, block=block))
+            state.tombs.extend(fresh)
         return out
 
-    def _remove(
-        self, path: str, state: _File, line: Line, remover: str | None, block: int | None = None
-    ) -> None:
-        if line.commit is not None:
-            state.pending.append((line, remover or "", block))
-        else:
-            if remover:
-                self._dropped_by[remover] = self._dropped_by.get(remover, 0) + 1
-                self._touch(path, line, remover, block, None)
-            self._span(path, [line], 0, state="dropped_before_commit", removed_by=remover)
+    def _revive(self, state: _File, text: str, prev: Line | None, nxt: Line | None) -> Line | None:
+        """Bring back a removed line if ``text`` is re-inserted in the gap it left."""
+        removed = {id(t.line) for t in state.tombs}
+        for k, tomb in enumerate(state.tombs):
+            if tomb.line.text != text or tomb.prev is not prev:
+                continue
+            if tomb.nxt is not nxt and (tomb.nxt is None or id(tomb.nxt) not in removed):
+                continue
+            del state.tombs[k]
+            if tomb.remover:
+                state.restored_by.add(tomb.remover)
+            return tomb.line
+        return None
 
     def _touch(
         self, path: str, line: Line, remover: str, block: int | None, commit: str | None
@@ -573,25 +598,6 @@ class Engine:
     ) -> None:
         base = (state.working if state.dirty else state.committed) or []
         origin = self._commit_origin(commit)
-        # Committed lines an edit removed in the working state may still be in the commit
-        # (the removal was undone before committing). Reuse those instances instead of
-        # minting new ones, and do not finalize their removal.
-        spare: dict[str, list[tuple[Line, str]]] = {}
-        for line, remover, _block in state.pending:
-            spare.setdefault(line.text, []).append((line, remover))
-        restored: set[int] = set()
-        restored_by: set[str] = set()
-
-        def fresh(text: str) -> Line:
-            queue = spare.get(text)
-            if queue:
-                line, remover = queue.pop(0)
-                restored.add(id(line))
-                if remover:
-                    restored_by.add(remover)
-                return line
-            return Line(text, origin)
-
         out: list[Line] = []
         if new_texts is not None:
             matcher = SequenceMatcher(None, [ln.text for ln in base], new_texts, autojunk=False)
@@ -601,14 +607,19 @@ class Engine:
                     continue
                 for k, line in enumerate(base[i1:i2]):
                     self._finalize_removal(path, line, commit, None, i1 + k)
-                out.extend(fresh(t) for t in new_texts[j1:j2])
+                nxt = base[i2] if i2 < len(base) else None
+                for text in new_texts[j1:j2]:
+                    # A removal undone before the commit keeps the original instance.
+                    revived = self._revive(state, text, out[-1] if out else None, nxt)
+                    out.append(revived or Line(text, origin))
         else:
             for k, line in enumerate(base):
                 self._finalize_removal(path, line, commit, None, k)
 
-        for line, remover, block in state.pending:
-            if id(line) not in restored:
-                self._finalize_removal(path, line, commit, remover or None, None, block)
+        # Whatever is still removed now really left the file in this commit.
+        for tomb in state.tombs:
+            self._finalize_removal(path, tomb.line, commit, tomb.remover, None, tomb.block)
+        restored_by = state.restored_by
         for line in out:
             if line.commit is None:
                 line.commit = commit.oid
@@ -626,7 +637,8 @@ class Engine:
                 r.outcome = Outcome.OVERWRITTEN_BEFORE_COMMIT
                 r.reasons.append("removal_undone_before_commit")
         state.committed = out if new_texts is not None else None
-        state.working, state.dirty, state.pending, state.applied = None, False, [], []
+        state.working, state.dirty, state.applied = None, False, []
+        state.tombs, state.restored_by = [], set()
 
     def _credit_commit(self, line: Line, commit: CommitMeta) -> None:
         edit_id = line.origin.edit_id
@@ -647,6 +659,9 @@ class Engine:
         block: int | None = None,
     ) -> None:
         if line.commit is None:
+            if remover:
+                self._dropped_by[remover] = self._dropped_by.get(remover, 0) + 1
+                self._touch(path, line, remover, block, None)
             self._span(path, [line], pos or 0, state="dropped_before_commit", removed_by=remover)
             return
         if remover:
@@ -675,6 +690,19 @@ class Engine:
                     fresh = [ln for ln in run if ln.commit is None]
                     if fresh:
                         self._span(path, fresh, start, state="provisional")
+                for tomb in state.tombs:
+                    # Uncommitted lines removed after the last commit: the removal is
+                    # observed but never settled. Committed lines stay present.
+                    if tomb.line.commit is None:
+                        if tomb.remover:
+                            self._touch(path, tomb.line, tomb.remover, tomb.block, None)
+                        self._span(
+                            path,
+                            [tomb.line],
+                            0,
+                            state="dropped_before_commit",
+                            removed_by=tomb.remover,
+                        )
         provisional = {s.origin.edit_id for s in self.result.spans if s.state == "provisional"}
         for r in self.result.edits.values():
             if (

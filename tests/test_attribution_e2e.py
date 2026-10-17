@@ -255,7 +255,7 @@ def test_report_lists_the_interaction(
     capsys.readouterr()
     main(["report", str(crossed["repo"]), *db])
     text = capsys.readouterr().out
-    assert "Cross-agent interactions: 1" in text
+    assert "Cross-agent interactions (verified): 1" in text
     assert only["interaction_id"] in text and "tandem explain" in text
 
 
