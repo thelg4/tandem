@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from tandem.report.json_report import redact_path
+from tandem.report.views import interaction_line, interaction_rows, summarize
 
 CAVEATS = (
     "A line is attributed to an agent only when its edit is reconstructed exactly from the "
@@ -55,10 +56,13 @@ class Coverage:
     usage: dict[str, dict[str, int]] = field(default_factory=dict)
     diagnostics: dict[str, int] = field(default_factory=dict)
     attribution: dict[str, Any] | None = None
+    interactions: list[dict[str, Any]] = field(default_factory=list)
+    interaction_summary: dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
         return {
             "attribution": self.attribution,
+            "interaction_summary": self.interaction_summary,
             "sources": self.sources,
             "sessions": self.sessions,
             "edits": self.edits,
@@ -195,6 +199,11 @@ def load(conn: sqlite3.Connection, filters: Filters | None = None) -> Coverage |
     ):
         cov.diagnostics[r["code"]] = r["n"]
     cov.attribution = _attribution(conn, int(run["run_id"]), filters)
+    session_id = _session_id(conn, filters.session)
+    cov.interactions = interaction_rows(
+        conn, int(run["run_id"]), agent=filters.agent, session=session_id, path=filters.file
+    )
+    cov.interaction_summary = summarize(cov.interactions)
     return cov
 
 
@@ -413,6 +422,9 @@ def render_text(cov: Coverage, *, head: str | None = None, filters: Filters | No
             lines.append(f"    edits: {_fmt_counts(a['edits_by_outcome'])}")
         lines.append("")
 
+    if att is not None:
+        lines += _interaction_section(cov)
+
     if len(cov.edits) > 1:
         lines.append(f"Files edited by both agents: {len(cov.shared_files)}")
         for f in cov.shared_files[:10]:
@@ -431,3 +443,36 @@ def render_text(cov: Coverage, *, head: str | None = None, filters: Filters | No
     lines.append("Notes")
     lines += [f"  - {c}" for c in CAVEATS]
     return "\n".join(lines)
+
+
+def _interaction_section(cov: Coverage) -> list[str]:
+    summary = cov.interaction_summary
+    lines = []
+    if not summary.get("cross_agent") and len(cov.edits) < 2:
+        lines.append("Cross-agent interactions: none (only one agent's edits are in this repo)")
+    else:
+        lines.append(
+            f"Cross-agent interactions (verified): {summary.get('cross_agent', 0)} "
+            f"({summary.get('cross_agent_lines_affected', 0)} line(s) affected, "
+            f"{summary.get('recent', 0)} recent)"
+        )
+        for direction, labels in sorted(summary.get("by_direction", {}).items()):
+            lines.append(f"  {direction}'s lines: {_fmt_counts(labels)}")
+    if summary.get("lower_evidence"):
+        lines.append(
+            f"  supported evidence only, not in the counts above: {summary['lower_evidence']}"
+        )
+    if summary.get("overlap_candidates"):
+        lines.append(f"  overlap candidates, order uncertain: {summary['overlap_candidates']}")
+    if summary.get("same_agent_cross_session"):
+        lines.append(
+            "  same agent, different session (counted separately): "
+            f"{summary['same_agent_cross_session']}"
+        )
+    shown = [r for r in cov.interactions if r["original"]["agent"] != r["later"]["agent"]][:10]
+    if shown:
+        lines.append("  Review first (review order, not severity):")
+        lines += ["    " + interaction_line(r) for r in shown]
+        lines.append("    Run `tandem explain <id>` for the evidence.")
+    lines.append("")
+    return lines

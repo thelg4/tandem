@@ -34,7 +34,7 @@ Edits are matched to the first commit at or after their timestamp. Commit dates 
 
 - Commit times have one-second resolution. An edit in the same second as a commit is applied before it only if the commit contains what the edit produced; otherwise it goes to the next commit.
 - Edits from different sessions with the same timestamp are ordered so that each edit's logged state fits, when such an order exists.
-- If an edit removed a committed line but the line is back in the commit, the removal did not land: the line keeps its instance, and a removal-only edit is reported as overwritten before commit.
+- A removed line stays pending until the next commit that touches its file. If the same text is re-inserted **in the same place** before then (by an unlogged change, another edit, or the commit itself), the removal did not happen: the line keeps its instance and owner, and a removal-only edit is reported as overwritten before commit. "Same place" means directly after the line that preceded it; the same text appearing anywhere else is a new line.
 
 ## Evidence classes
 
