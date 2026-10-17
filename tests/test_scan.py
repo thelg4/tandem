@@ -8,28 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from adapter_helpers import FIXTURES
 from tandem.config import Policy
 from tandem.errors import ScanBusyError
 from tandem.ingest import Scanner, ScanOptions
 from tandem.storage import db
-
-
-def _copy_logs(dest: Path, agent_dir: str, repo: Path) -> None:
-    """Copy fixture logs, rewriting the synthetic /work/demo working directory to ``repo``."""
-    for src in (FIXTURES / agent_dir).rglob("*.jsonl"):
-        out = dest / src.relative_to(FIXTURES / agent_dir)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(src.read_text().replace("/work/demo", str(repo)))
-
-
-@pytest.fixture
-def env(repo_with_history: tuple[Path, list[str]], tmp_path: Path) -> dict[str, Path]:
-    repo, _ = repo_with_history
-    claude, codex = tmp_path / "logs" / "claude", tmp_path / "logs" / "codex"
-    _copy_logs(claude, "claude_code", repo)
-    _copy_logs(codex, "codex", repo)
-    return {"repo": repo, "claude": claude, "codex": codex, "db": tmp_path / "t.sqlite3"}
 
 
 def scan(env: dict[str, Path], **kw: object):  # type: ignore[no-untyped-def]
@@ -60,6 +42,8 @@ def test_first_scan_imports_sessions_events_and_edits(env: dict[str, Path]) -> N
     assert ("app.py", "codex.patch_text") in paths
     assert ("docs/notes.md", "codex.file_change") in paths
     assert ("lib/util.py", "codex.file_change") in paths
+    # Both files from one multi-file FileChange item are kept.
+    assert ("old.txt", "codex.file_change") in paths
     # Claude updates rebuild exactly from the log; patch text cannot be placed yet.
     recon = {(r["evidence_source"], r["reconstruction"]) for r in edits}
     assert ("claude_code.tool_use_result", "reconstructed") in recon

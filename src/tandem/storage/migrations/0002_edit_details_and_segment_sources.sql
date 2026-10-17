@@ -14,3 +14,9 @@ CREATE INDEX diagnostics_run ON diagnostics(run_id, code);
 -- Segments are derived per source file, so a re-import replaces only that file's segments.
 ALTER TABLE session_segments ADD COLUMN source_id TEXT REFERENCES sources(source_id);
 CREATE INDEX session_segments_source ON session_segments(source_id, session_id);
+
+-- One provider record can yield several events (a multi-file Codex FileChange), so the
+-- provider ID is not unique per source. Event identity is the event_id primary key.
+DROP INDEX events_provider_id;
+CREATE INDEX events_provider_id ON events(source_id, provider_event_id)
+    WHERE provider_event_id IS NOT NULL;

@@ -439,13 +439,14 @@ class Scanner:
 
     def _store_event(self, conn: sqlite3.Connection, e: Event) -> bool:
         cur = conn.execute(
-            "INSERT OR IGNORE INTO events (event_id, source_id, source_generation, record_offset, "
+            "INSERT INTO events (event_id, source_id, source_generation, record_offset, "
             "record_length, provider_event_id, session_id, sequence, event_type, status, "
             "tool_name, "
             "tool_call_id, model_id, repo_id, worktree_id, recorded_cwd, effective_cwd, "
             "relative_path, path_resolution, raw_timestamp, utc_timestamp, time_quality, "
             "adapter_version, envelope_version, reason_codes) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(event_id) DO NOTHING",
             (
                 e.identity.event_id,
                 e.identity.source_id,
