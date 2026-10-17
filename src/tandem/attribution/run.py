@@ -124,14 +124,23 @@ def run_attribution(
     result = attribute(
         reader, commits, edits, max_blob_bytes=policy.max_blob_bytes, excluded=excluded
     )
-    in_range = {c.oid for c in commits}
+    index = {c.oid: i for i, c in enumerate(commits)}
     tracked = result.tracked_paths
+    since_index = {p: index[oid] for p, oid in result.unavailable_since.items()}
     per_commit = reader.added_lines_by_commit(
-        target,
-        max_count=policy.max_history_commits,
-        include=lambda p: not excluded(p) and p not in tracked,
+        target, max_count=policy.max_history_commits, include=lambda p: not excluded(p)
     )
-    untracked = sum(n for oid, n in per_commit.items() if oid in in_range)
+    # Lines the engine did not line-track count as unknown: files no agent touched, and
+    # tracked files from the commit where they became binary or too large onward.
+    untracked = 0
+    for oid, paths in per_commit.items():
+        at = index.get(oid)
+        if at is None:
+            continue
+        for path, n in paths.items():
+            if path not in tracked or (path in since_index and at >= since_index[path]):
+                untracked += n
+    in_range = set(index)
 
     with conn:
         _store(conn, run_id, repo_id, result, unavailable, untracked, commits)

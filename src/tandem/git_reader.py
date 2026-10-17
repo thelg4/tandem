@@ -291,8 +291,8 @@ class GitReader:
 
     def added_lines_by_commit(
         self, target: str, *, max_count: int, include: Callable[[str], bool]
-    ) -> dict[str, int]:
-        """Inserted text lines per first-parent commit, in one ``git log`` call.
+    ) -> dict[str, dict[str, int]]:
+        """Inserted text lines per first-parent commit and path, in one ``git log`` call.
 
         Merge commits are measured against their first parent. Binary changes and paths
         ``include`` rejects are not counted.
@@ -313,11 +313,12 @@ class GitReader:
             "--end-of-options",
             target,
         ).stdout.decode("utf-8", "surrogateescape")
-        counts: dict[str, int] = {}
+        counts: dict[str, dict[str, int]] = {}
         for chunk in filter(None, out.split("\x1e")):
             oid, _, body = chunk.partition("\0")
             fields = body.split("\0")
-            total, i = 0, 0
+            per_path: dict[str, int] = {}
+            i = 0
             while i < len(fields):
                 head = fields[i].lstrip("\n")
                 if not head:
@@ -331,8 +332,8 @@ class GitReader:
                     path = parts[2] if len(parts) > 2 else ""
                     i += 1
                 if parts[0] != "-" and include(path):
-                    total += int(parts[0])
-            counts[oid.strip()] = total
+                    per_path[path] = per_path.get(path, 0) + int(parts[0])
+            counts[oid.strip()] = per_path
         return counts
 
 

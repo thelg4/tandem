@@ -1,7 +1,7 @@
 -- Attribution results per analysis run (spec §5, §12).
 
 ALTER TABLE lineage ADD COLUMN state TEXT NOT NULL DEFAULT 'present';
-    -- present | removed | dropped_before_commit | provisional | pending_removal
+    -- present | removed | dropped_before_commit | provisional | unavailable
 ALTER TABLE lineage ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'unknown';
     -- agent | unknown | baseline
 ALTER TABLE lineage ADD COLUMN reason_codes TEXT;

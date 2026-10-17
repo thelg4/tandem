@@ -208,7 +208,7 @@ def _attribution(conn: sqlite3.Connection, run_id: int, filters: Filters) -> dic
     classes: dict[str, int] = {}
     for r in conn.execute(
         "SELECT l.evidence_class cls, sum(l.line_count) n FROM lineage l WHERE l.run_id = ?1 "
-        "AND l.origin_kind = 'agent' AND l.state IN ('present', 'removed') AND "
+        "AND l.origin_kind = 'agent' AND l.state IN ('present', 'removed', 'unavailable') AND "
         "l.introduced_commit_id IS NOT NULL GROUP BY 1",
         (run_id,),
     ):
@@ -225,7 +225,7 @@ def _attribution(conn: sqlite3.Connection, run_id: int, filters: Filters) -> dic
     ):
         a = agents.setdefault(r["agent"], _agent_block())
         n = int(r["n"])
-        if r["state"] in ("present", "removed"):
+        if r["state"] in ("present", "removed", "unavailable"):
             a["lines_committed"][r["cls"]] = a["lines_committed"].get(r["cls"], 0) + n
         if r["state"] == "present":
             a["lines_present_at_target"] += n

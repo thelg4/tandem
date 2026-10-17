@@ -115,5 +115,6 @@ def test_added_lines_by_commit_matches_per_commit(
     reader = GitReader(repo)
     history = reader.history(commits[-1], max_count=10)
     bulk = reader.added_lines_by_commit(commits[-1], max_count=10, include=lambda p: True)
-    assert bulk == {c.oid: reader.added_lines(c, lambda p: True) for c in history}
-    assert bulk[commits[0]] == 2
+    totals = {oid: sum(paths.values()) for oid, paths in bulk.items()}
+    assert totals == {c.oid: reader.added_lines(c, lambda p: True) for c in history}
+    assert bulk[commits[0]] == {"app.py": 2}

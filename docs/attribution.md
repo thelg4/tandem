@@ -10,7 +10,7 @@ Every file an agent edited, from the start of the analyzed history to the target
 - Line identity is exact text after line-ending normalization. Indentation and whitespace changes count as changes.
 - A modified line is a removal plus a new instance. Unchanged lines keep their instance, even when an agent rewrites the whole file.
 - Exact (100%) renames carry lineage to the new path. Moves within a file and copies are not detected.
-- Binary files, files over the blob size limit, and excluded paths (lockfiles, vendored and generated code) are not line-tracked.
+- Binary files, files over the blob size limit, and excluded paths (lockfiles, vendored and generated code) are not line-tracked. A tracked file that becomes binary or too large stops being tracked at that commit: its earlier agent lines keep their introduction record but are no longer reported present, and its later additions count as unknown.
 
 ## Applying an agent edit
 
@@ -24,11 +24,17 @@ The edit is rebuilt against the file's tracked working state:
 
 If the log's before-state differs from the tracked state, something unlogged changed the file in between (a shell command, a formatter, a hand edit). That difference is applied first as an **unknown** change, so it is never credited to an agent.
 
+A whole-file add that lands on a file with existing content has no logged before-state, so lines already on disk could have come from an unlogged change. Such an edit is capped at `supported`.
+
 ## Commits
 
 Each commit's blob is compared with the working state. Matching lines keep their instance and are anchored to the commit. Lines only in the commit are new instances of unknown origin. Agent lines missing from the commit were **dropped before commit** and get no committed credit.
 
 Edits are matched to the first commit at or after their timestamp. Commit dates only order candidates: an edit counts as committed only if its lines actually appear in the commit.
+
+- Commit times have one-second resolution. An edit in the same second as a commit is applied before it only if the commit contains what the edit produced; otherwise it goes to the next commit.
+- Edits from different sessions with the same timestamp are ordered so that each edit's logged state fits, when such an order exists.
+- If an edit removed a committed line but the line is back in the commit, the removal did not land: the line keeps its instance, and a removal-only edit is reported as overwritten before commit.
 
 ## Evidence classes
 
@@ -57,4 +63,5 @@ These two measures are reported separately and must not be conflated.
 
 - Moves made outside a logged edit (for example `mv` in a shell) are not followed; edits to the old path stay provisional.
 - Identical lines at several positions are aligned by a deterministic diff (`difflib.SequenceMatcher`); a different alignment could assign some of them differently.
-- Merge commits are measured against their first parent; side-branch history is not walked.
+- Merge commits are measured against their first parent; side-branch history is not walked. Agent edits made on another branch are applied to the first-parent state and can inflate unknown and inserted counts when that work later merges.
+- If an agent edits a file's new path after a `git mv` but before the rename is committed, the rename replaces that edit's working state and the edit is reported as overwritten.

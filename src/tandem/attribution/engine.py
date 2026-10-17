@@ -116,7 +116,7 @@ class Span:
     removed_by: str | None = None
     """Edit ID that removed these lines, when an agent edit did."""
     state: str = "present"
-    """present | removed | dropped_before_commit | provisional | pending_removal"""
+    """present | removed | dropped_before_commit | provisional | unavailable"""
 
 
 @dataclass(slots=True)
@@ -127,6 +127,8 @@ class Result:
     baseline_commit: str | None = None
     tracked_paths: set[str] = field(default_factory=set)
     unavailable_paths: dict[str, str] = field(default_factory=dict)
+    unavailable_since: dict[str, str] = field(default_factory=dict)
+    """Path -> first commit whose blob could not be line-tracked (binary or too large)."""
     inserted_lines_in_range: int = 0
     """Lines introduced by commits in range for tracked files (denominator part)."""
 
@@ -179,6 +181,10 @@ class Engine:
         self.result.baseline_commit = self.baseline
         self.result.commits_analyzed = len(commits)
         self._commit_origins: dict[str, Origin] = {}
+        self._dropped_by: dict[str, int] = {}
+        """Edit -> uncommitted lines it removed (those removals land with the next commit)."""
+        self._landed: set[str] = set()
+        """Edits whose removal of a committed line reached a commit."""
 
     # -- public -----------------------------------------------------------------------------
 
@@ -208,14 +214,105 @@ class Engine:
             self._init_file(path)
 
         for commit in self.commits:
-            while i < len(timed) and timed[i][0] < commit.commit_time + 1:
-                self._apply_edit(timed[i][1])
+            before: list[AttrEdit] = []
+            while i < len(timed) and timed[i][0] < commit.commit_time:
+                before.append(timed[i][1])
                 i += 1
+            self._apply_batch(before)
+            # Commit times have one-second resolution. An edit in the commit's own second
+            # lands before it only if the commit contains what the edit produced.
+            same: list[AttrEdit] = []
+            while i < len(timed) and timed[i][0] < commit.commit_time + 1:
+                same.append(timed[i][1])
+                i += 1
+            later: list[AttrEdit] = []
+            for e in self._order_ties(same):
+                if self._lands_in(e, deltas[commit.oid]):
+                    self._apply_edit(e)
+                else:
+                    later.append(e)
             self._commit(commit, deltas[commit.oid], tracked)
-        for _, e in timed[i:]:
-            self._apply_edit(e)
+            for e in later:
+                self.result.edits[e.edit_id].reasons.append("same_second_as_previous_commit")
+                self._apply_edit(e)
+        self._apply_batch([e for _, e in timed[i:]])
         self._finish()
         return self.result
+
+    def _apply_batch(self, edits: list[AttrEdit]) -> None:
+        for e in self._order_ties(edits):
+            self._apply_edit(e)
+
+    def _order_ties(self, edits: list[AttrEdit]) -> list[AttrEdit]:
+        """Order edits that share a timestamp so each one's logged state fits, when possible.
+
+        Edits arrive sorted by (time, source, sequence). Across sources that tie-break is
+        arbitrary, so within a group of equal times, prefer an edit whose reconstruction
+        fits the current working state exactly.
+        """
+        out: list[AttrEdit] = []
+        k = 0
+        while k < len(edits):
+            j = k
+            while j < len(edits) and edits[j].time == edits[k].time:
+                j += 1
+            group = edits[k:j]
+            if len(group) == 1 or len({e.session_id for e in group}) == 1:
+                out.extend(group)
+            else:
+                out.extend(self._fit_order(group))
+            k = j
+        return out
+
+    def _fit_order(self, group: list[AttrEdit]) -> list[AttrEdit]:
+        # Simulate on copies of working texts: pick the first edit that fits, repeat.
+        texts = {e.path: _texts(self._current(e.path)) for e in group if e.path in self.files}
+        remaining, ordered = list(group), []
+        while remaining:
+            pick = next((e for e in remaining if self._fits(e, texts.get(e.path))), remaining[0])
+            if pick is not remaining[0]:
+                self.result.edits[pick.edit_id].reasons.append("reordered_within_same_timestamp")
+            remaining.remove(pick)
+            ordered.append(pick)
+            tr = reconstruct(pick.edit, texts.get(pick.path))  # type: ignore[arg-type]
+            if isinstance(tr, Transition):
+                texts[pick.path] = tr.after
+        return ordered
+
+    @staticmethod
+    def _fits(e: AttrEdit, current: list[str] | None) -> bool:
+        tr = reconstruct(e.edit, current)  # type: ignore[arg-type]
+        if isinstance(tr, Unplaceable) or not tr.unique or "located_by_content" in tr.reasons:
+            return False
+        return not (tr.before_from_log and tr.before != current)
+
+    def _current(self, path: str) -> list[Line] | None:
+        state = self.files[path]
+        return state.working if state.dirty else state.committed
+
+    def _lands_in(self, e: AttrEdit, deltas: list[FileDelta]) -> bool:
+        """True when ``deltas`` contain the result of ``e`` for its file."""
+        delta = next((d for d in deltas if e.path in (d.path, d.old_path)), None)
+        if delta is None or e.path not in self.files:
+            return True  # the commit does not touch the file; order does not matter
+        tr = reconstruct(e.edit, _texts(self._current(e.path)))  # type: ignore[arg-type]
+        if isinstance(tr, Unplaceable):
+            return True
+        if tr.after is None:
+            return delta.new_blob is None
+        if delta.new_blob is None:
+            return False
+        committed = self.load(delta.new_blob)
+        if committed is None:
+            return True
+        before = list(tr.before or [])
+        added = [t for t in tr.after if t not in before]
+        pool = list(committed)
+        for t in added:
+            if t not in pool:
+                return False
+            pool.remove(t)
+        return True
 
     # -- setup ------------------------------------------------------------------------------
 
@@ -227,11 +324,21 @@ class Engine:
             move = getattr(e.edit, "move_to", None)
             if isinstance(move, str):
                 tracked.add(move)
-        # Follow exact renames backwards so a file's lineage starts at the range start.
-        for commit in reversed(self.commits):
-            for d in deltas[commit.oid]:
-                if d.status == "R" and d.path in tracked and d.old_path:
-                    tracked.add(d.old_path)
+        # Follow exact renames both ways, so lineage starts at the range start and keeps
+        # being tracked after the file moves.
+        renames = [
+            (d.old_path, d.path)
+            for c in self.commits
+            for d in deltas[c.oid]
+            if d.status == "R" and d.old_path
+        ]
+        changed = True
+        while changed:
+            changed = False
+            for old, new in renames:
+                if (old in tracked) != (new in tracked):
+                    tracked.update((old, new))
+                    changed = True
         return tracked
 
     def _init_file(self, path: str) -> None:
@@ -316,6 +423,10 @@ class Engine:
         evidence = EvidenceClass.VERIFIED
         if not tr.unique:
             evidence = EvidenceClass.SUPPORTED
+        if "add_over_existing_content" in tr.reasons:
+            # A whole-file write with no logged before-state: lines already on disk may
+            # have come from an unlogged change, so the edit cannot be verified.
+            evidence = EvidenceClass.SUPPORTED
         if getattr(e.edit, "user_modified", False):
             evidence = EvidenceClass.SUPPORTED
             reasons.append("user_modified")
@@ -357,6 +468,8 @@ class Engine:
         if line.commit is not None:
             state.pending.append((line, remover or ""))
         else:
+            if remover:
+                self._dropped_by[remover] = self._dropped_by.get(remover, 0) + 1
             self._span(path, [line], 0, state="dropped_before_commit", removed_by=remover)
 
     # -- commits ----------------------------------------------------------------------------
@@ -378,19 +491,47 @@ class Engine:
             if d.path not in tracked or d.path not in self.files:
                 continue
             if not d.is_regular_file:
-                self.result.unavailable_paths.setdefault(d.path, "not_a_regular_file")
+                self._make_unavailable(d.path, commit, "not_a_regular_file")
                 continue
             new_lines = None if d.new_blob is None else self.load(d.new_blob)
             if d.new_blob is not None and new_lines is None:
-                self.result.unavailable_paths.setdefault(d.path, "binary_or_too_large")
+                self._make_unavailable(d.path, commit, "binary_or_too_large")
                 continue
             self._reconcile(d.path, self.files[d.path], new_lines, commit)
+
+    def _make_unavailable(self, path: str, commit: CommitMeta, reason: str) -> None:
+        """Stop line-tracking a file. Its committed lines keep their introduction record but
+        are no longer reported present, and later commits count toward unknown lines."""
+        state = self.files.pop(path)
+        self.result.unavailable_paths[path] = reason
+        self.result.unavailable_since[path] = commit.oid
+        for start, run in _runs(state.committed or []):
+            self._span(path, run, start, state="unavailable")
 
     def _reconcile(
         self, path: str, state: _File, new_texts: list[str] | None, commit: CommitMeta
     ) -> None:
         base = (state.working if state.dirty else state.committed) or []
         origin = self._commit_origin(commit)
+        # Committed lines an edit removed in the working state may still be in the commit
+        # (the removal was undone before committing). Reuse those instances instead of
+        # minting new ones, and do not finalize their removal.
+        spare: dict[str, list[tuple[Line, str]]] = {}
+        for line, remover in state.pending:
+            spare.setdefault(line.text, []).append((line, remover))
+        restored: set[int] = set()
+        restored_by: set[str] = set()
+
+        def fresh(text: str) -> Line:
+            queue = spare.get(text)
+            if queue:
+                line, remover = queue.pop(0)
+                restored.add(id(line))
+                if remover:
+                    restored_by.add(remover)
+                return line
+            return Line(text, origin)
+
         out: list[Line] = []
         if new_texts is not None:
             matcher = SequenceMatcher(None, [ln.text for ln in base], new_texts, autojunk=False)
@@ -400,13 +541,14 @@ class Engine:
                     continue
                 for k, line in enumerate(base[i1:i2]):
                     self._finalize_removal(path, line, commit, None, i1 + k)
-                out.extend(Line(t, origin) for t in new_texts[j1:j2])
+                out.extend(fresh(t) for t in new_texts[j1:j2])
         else:
             for k, line in enumerate(base):
                 self._finalize_removal(path, line, commit, None, k)
 
         for line, remover in state.pending:
-            self._finalize_removal(path, line, commit, remover or None, None)
+            if id(line) not in restored:
+                self._finalize_removal(path, line, commit, remover or None, None)
         for line in out:
             if line.commit is None:
                 line.commit = commit.oid
@@ -414,10 +556,15 @@ class Engine:
                 self._credit_commit(line, commit)
         for edit_id in state.applied:
             r = self.result.edits[edit_id]
-            if r.outcome is Outcome.UNCOMMITTED and r.lines_inserted == 0:
-                # A removal-only edit has landed once a commit reconciles its file.
+            if r.outcome is not Outcome.UNCOMMITTED or r.lines_inserted:
+                continue
+            if edit_id in self._landed or self._dropped_by.get(edit_id):
+                # A removal-only edit has landed once its removals reach a commit.
                 r.outcome = Outcome.COMMITTED
                 r.anchor_commit = r.anchor_commit or commit.oid
+            elif edit_id in restored_by:
+                r.outcome = Outcome.OVERWRITTEN_BEFORE_COMMIT
+                r.reasons.append("removal_undone_before_commit")
         state.committed = out if new_texts is not None else None
         state.working, state.dirty, state.pending, state.applied = None, False, [], []
 
@@ -437,6 +584,7 @@ class Engine:
             self._span(path, [line], pos or 0, state="dropped_before_commit", removed_by=remover)
             return
         if remover:
+            self._landed.add(remover)
             r = self.result.edits.get(remover)
             if r is not None:
                 r.anchor_commit = r.anchor_commit or commit.oid
@@ -460,8 +608,6 @@ class Engine:
                     fresh = [ln for ln in run if ln.commit is None]
                     if fresh:
                         self._span(path, fresh, start, state="provisional")
-                for line, remover in state.pending:
-                    self._span(path, [line], 0, state="pending_removal", removed_by=remover or None)
         provisional = {s.origin.edit_id for s in self.result.spans if s.state == "provisional"}
         for r in self.result.edits.values():
             if (
@@ -498,7 +644,7 @@ class Engine:
             and prev.introduced_commit == span.introduced_commit
             and prev.removed_commit == span.removed_commit
             and prev.removed_by == span.removed_by
-            and state in ("removed", "dropped_before_commit", "pending_removal")
+            and state in ("removed", "dropped_before_commit")
         ):
             spans[-1] = Span(
                 path,

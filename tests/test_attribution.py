@@ -149,14 +149,16 @@ class Scenario:
             self.human(path, after)
         return edit_id
 
-    def run(self, *, max_count: int = 100, excluded: tuple[str, ...] = ()) -> Result:
+    def run(
+        self, *, max_count: int = 100, excluded: tuple[str, ...] = (), max_blob: int = 1 << 20
+    ) -> Result:
         reader = GitReader(self.repo)
         commits = reader.history(reader.resolve_commit("HEAD"), max_count=max_count)
         return attribute(
             reader,
             commits,
             self.edits,
-            max_blob_bytes=1 << 20,
+            max_blob_bytes=max_blob,
             excluded=lambda p: matches_any(p, excluded),
         )
 
@@ -364,3 +366,125 @@ def test_removal_only_edit_of_uncommitted_lines_is_committed(tmp_path: Path) -> 
     s.commit()
     r = s.run()
     assert r.edits[trim].outcome is Outcome.COMMITTED
+
+
+# -- Regressions from the independent review ---------------------------------------------
+
+
+def _retime(
+    s: Scenario, edit_id: str, *, time: float | None = None, order: tuple[str, int] | None = None
+) -> None:
+    s.edits = [
+        AttrEdit(
+            e.edit_id,
+            e.session_id,
+            e.agent,
+            e.time if time is None else time,
+            e.order if order is None else order,
+            e.path,
+            e.edit,
+        )
+        if e.edit_id == edit_id
+        else e
+        for e in s.edits
+    ]
+
+
+def test_add_over_unlogged_content_is_not_verified(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "x\n")
+    s.commit()
+    s.human("m.py", "x\nshell\n")  # unlogged shell change
+    add = s._log(
+        "codex",
+        "b",
+        "m.py",
+        ObservedEdit(
+            "m.py", ChangeType.ADD, EditSource.CODEX_FILE_CHANGE, after_text="x\nshell\nnew\n"
+        ),
+        "x\nshell\nnew\n",
+    )
+    s.commit()
+    r = s.run()
+    verified = [
+        x
+        for x in r.spans
+        if x.origin.edit_id == add and x.origin.evidence is EvidenceClass.VERIFIED
+    ]
+    assert verified == []
+
+
+def test_rename_carries_tracking_forward(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    a = s.claude("a", "old.py", "a1\na2\n")
+    s.commit()
+    s.move("old.py", "new.py")
+    s.commit()
+    s.human("new.py", "h\n")
+    s.commit()
+    r = s.run()
+    assert lines_by(r, a) == 0 and lines_by(r, a, "removed") == 2
+    assert r.inserted_lines_in_range == 3
+
+
+def test_reverted_pure_deletion_is_not_committed(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "x\ny\n")
+    s.commit()
+    d = s.claude("a", "m.py", "x\n")
+    s.human("m.py", "x\ny\nz\n")  # the deleted line comes back before the commit
+    s.commit()
+    r = s.run()
+    assert r.edits[d].outcome is not Outcome.COMMITTED
+    assert not [x for x in r.spans if x.removed_by == d]
+    assert r.inserted_lines_in_range == 3  # matches git: 2 + 1
+
+
+def test_oversized_file_counts_in_denominator_and_is_not_present(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    a = s.claude("a", "m.py", "a\n")
+    s.commit()
+    s.human("m.py", "a\n" + "".join(f"line{i}\n" for i in range(50)))
+    s.commit()
+    r = s.run(max_blob=100)
+    assert "m.py" in r.unavailable_paths
+    assert lines_by(r, a) == 0
+    assert r.unavailable_since["m.py"] == s.commits[-1]
+
+
+def test_equal_timestamps_prefer_order_matching_logged_state(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "base\n")
+    s.commit()
+    a = s.claude("zzz", "m.py", "base\nA\n")
+    b = s.claude("aaa", "m.py", "base\nA\nB\n")
+    t = s.edits[-1].time
+    _retime(s, a, time=t, order=("srcZ", 0))
+    _retime(s, b, time=t, order=("srcA", 0))
+    s.commit()
+    r = s.run()
+    assert r.edits[a].outcome is Outcome.COMMITTED and r.edits[b].outcome is Outcome.COMMITTED
+    assert lines_by(r, a) == 1 and lines_by(r, b) == 1
+
+
+def test_edit_in_same_second_after_commit_goes_to_next_commit(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "x\n")
+    s.commit()
+    s.human("m.py", "x\nhuman\n")
+    s.commit()
+    ct = s.t
+    a = s.claude("a", "m.py", "x\nhuman\nagent\n")
+    _retime(s, a, time=ct + 0.5)
+    s.commit()
+    r = s.run()
+    assert r.edits[a].outcome is Outcome.COMMITTED and lines_by(r, a) == 1
+
+
+def test_pending_removal_at_target_is_not_double_counted(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.human("m.py", "x\ny\n")
+    s.commit()
+    s.codex("b", "m.py", "x\n")  # uncommitted removal
+    r = s.run()
+    assert sum(x.count for x in r.spans if x.path == "m.py") == 2
