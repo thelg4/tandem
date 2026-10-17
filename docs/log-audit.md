@@ -104,3 +104,17 @@ Run 2026-10-17 with adapters 0.1.0, counts only.
 Takeaways:
 - Nearly half of Codex edits (171 of 357) are linked to their tool call only by position in the log, because they ran inside `exec` code cells. They are tagged `linked_by_source_order` so attribution can treat that link as weaker than an ID match.
 - `exec` cell outputs carry no exit code, so their status is `unknown`; the `FileChange` items that follow them are the success evidence.
+
+## Scan validation against real logs
+
+Run 2026-10-17 with schema v2. The 13 Codex rollouts were scanned against empty stand-in repositories created at each project path the logs reference (no real code involved), plus this repository against its own Claude Code session log.
+
+| Check | Result |
+| --- | --- |
+| Codex edits placed in a repository | 357 of 357, each in exactly one repository |
+| Edits made outside the session's working directory | 251, from one session working in a different folder; placed in the repository actually edited (ING-03) |
+| Claude Code edits to this repository | 61, all reconstructable from the log |
+| Full scan, 13 rollouts (36 MB) | about 0.6 s per repository |
+| Rescan with nothing changed | about 0.14 s |
+
+This run also found a storage bug, now fixed: a multi-file `FileChange` yields several events sharing one provider ID, and a unique index on that ID silently dropped all but the first file. Migration 0002 makes the index non-unique, and inserts now skip only on an `event_id` conflict.
