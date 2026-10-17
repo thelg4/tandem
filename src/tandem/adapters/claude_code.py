@@ -221,9 +221,11 @@ def _session(rec: dict[str, Any]) -> SessionInfo | None:
         return None
     if rec.get("isSidechain") is True:
         agent_id = _str(rec.get("agentId")) or "sidechain"
+        # Subagent (sidechain) records reuse the parent's sessionId; give the subagent its
+        # own provider identity so it is stored as a distinct session.
         return SessionInfo(
             AgentFamily.CLAUDE_CODE,
-            sid,
+            f"{sid}/{agent_id}",
             f"claude_code:{sid}/{agent_id}",
             parent_session_id=f"claude_code:{sid}",
         )
