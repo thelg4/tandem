@@ -110,6 +110,7 @@ def test_tokens_with_no_surviving_lines_is_not_zero_or_infinite() -> None:
     tps = card.metrics[M.TOKENS_PER_SURVIVING_LINE]
     assert tps.status is S.NOT_APPLICABLE and tps.numerator == 5_000 and tps.ratio is None
     assert "no surviving lines" in tps.notes[0]
+    assert tps.display() == "5,000 tokens, no surviving lines"
 
 
 def test_incomplete_usage_and_untracked_files_make_metrics_partial() -> None:

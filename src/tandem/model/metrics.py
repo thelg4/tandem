@@ -96,6 +96,8 @@ class MetricValue:
             return str(self.numerator)
         ratio = self.ratio
         if ratio is None:
+            if self.name is MetricName.TOKENS_PER_SURVIVING_LINE and self.numerator:
+                return f"{self.numerator:,} tokens, no surviving lines"
             return "n/a"
         if self.name is MetricName.TOKENS_PER_SURVIVING_LINE:
             return f"{self.numerator:,} / {self.denominator} = {float(ratio):,.0f} per line"

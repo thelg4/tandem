@@ -23,6 +23,9 @@ from tandem.config import Policy
 from tandem.git_reader import RENAME_POLICY, CommitMeta, GitReader
 from tandem.globs import matches_any
 from tandem.interactions import Interaction, Window, derive
+from tandem.metrics.build import build as build_scorecards
+from tandem.metrics.build import store as store_scorecards
+from tandem.metrics.usage import session_usage
 from tandem.model.attribution import EvidenceClass
 from tandem.model.edits import ObservedEdit
 from tandem.model.interactions import InteractionLabel
@@ -153,9 +156,13 @@ def run_attribution(
     window = Window(policy.window_hours, policy.window_commits, policy.window_mode)
     found = derive(result, {e.edit_id: e for e in edits}, window)
 
+    usage = session_usage(conn, repo_id)
+    cards = build_scorecards(result, edits, found, usage, policy.horizon_commits)
+
     with conn:
         _store(conn, run_id, repo_id, result, unavailable, untracked, commits)
         _store_interactions(conn, run_id, found, window)
+        store_scorecards(conn, run_id, cards, usage, policy.horizon_commits)
     verified = sum(
         s.count
         for s in result.spans

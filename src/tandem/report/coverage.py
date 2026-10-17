@@ -16,6 +16,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+from tandem.report.durability import durability, durability_section
 from tandem.report.json_report import redact_path
 from tandem.report.views import interaction_line, interaction_rows, summarize
 
@@ -27,7 +28,12 @@ CAVEATS = (
     "does not show that code is correct.",
     "Files edited by both agents show overlap in touched files, not interactions: "
     "an edit by one agent may not change lines the other wrote.",
-    "Token counts are as reported by each agent; Codex cached input is a subset of input.",
+    "Token counts are as reported by each agent; Codex cached input is a subset of input. "
+    "Tokens per surviving line uses only sessions with complete usage that worked only in "
+    "this repository.",
+    "Durability metrics are independent measurements with their own denominators, not a "
+    "ranking. Survival describes persistence, not correctness, and rewrites may be "
+    "improvements.",
 )
 
 
@@ -58,11 +64,13 @@ class Coverage:
     attribution: dict[str, Any] | None = None
     interactions: list[dict[str, Any]] = field(default_factory=list)
     interaction_summary: dict[str, Any] = field(default_factory=dict)
+    durability: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
         return {
             "attribution": self.attribution,
             "interaction_summary": self.interaction_summary,
+            "durability": self.durability,
             "sources": self.sources,
             "sessions": self.sessions,
             "edits": self.edits,
@@ -204,6 +212,7 @@ def load(conn: sqlite3.Connection, filters: Filters | None = None) -> Coverage |
         conn, int(run["run_id"]), agent=filters.agent, session=session_id, path=filters.file
     )
     cov.interaction_summary = summarize(cov.interactions)
+    cov.durability = durability(conn, int(run["run_id"]), "agent", agent=filters.agent)
     return cov
 
 
@@ -424,6 +433,8 @@ def render_text(cov: Coverage, *, head: str | None = None, filters: Filters | No
 
     if att is not None:
         lines += _interaction_section(cov)
+    if cov.durability:
+        lines += durability_section(cov.durability)
 
     if len(cov.edits) > 1:
         lines.append(f"Files edited by both agents: {len(cov.shared_files)}")

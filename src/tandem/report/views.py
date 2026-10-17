@@ -13,6 +13,7 @@ from typing import Any
 
 from tandem.attribution.run import load_edits
 from tandem.model.edits import ChangeType, ObservedEdit
+from tandem.report.durability import durability, durability_section
 from tandem.report.json_report import redact_path
 
 MAX_DIFF_LINES = 60
@@ -326,6 +327,7 @@ def session_view(conn: sqlite3.Connection, session: sqlite3.Row) -> dict[str, An
             (sid,),
         )
     }
+    cards = durability(conn, run_id, "session", scope=sid)
     segments = conn.execute(
         "SELECT count(*) FROM session_segments WHERE session_id = ?", (sid,)
     ).fetchone()[0]
@@ -342,6 +344,7 @@ def session_view(conn: sqlite3.Connection, session: sqlite3.Row) -> dict[str, An
         "interactions_given": [r for r in rows if r["later"]["session"] == sid],
         "interactions_received": [r for r in rows if r["original"]["session"] == sid],
         "usage": usage,
+        "durability": cards.get(sid),
     }
 
 
@@ -372,4 +375,6 @@ def render_session(v: dict[str, Any]) -> str:
         lines += ["  " + interaction_line(r) for r in rows[:10]]
     if v["usage"]:
         lines += ["", f"Tokens as reported: {counts(v['usage'])}"]
+    if v.get("durability"):
+        lines += [""] + durability_section({v["session_id"]: v["durability"]})
     return "\n".join(lines)

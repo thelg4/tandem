@@ -190,6 +190,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     if not path.exists():
         _err("tandem: no scan yet for this repository; run `tandem scan` first")
         return int(ExitCode.UNAVAILABLE)
+    wanted_horizon = getattr(args, "horizon_commits", None)
     filters = Filters(agent=args.agent, session=args.session, file=args.file)
     conn = db.connect(path, readonly=True)
     try:
@@ -199,12 +200,24 @@ def cmd_report(args: argparse.Namespace) -> int:
     if cov is None:
         _err("tandem: no completed scan for this repository; run `tandem scan` first")
         return int(ExitCode.UNAVAILABLE)
+    stored = {c["horizon_commits"] for c in cov.durability.values()}
+    if wanted_horizon is not None and stored and wanted_horizon not in stored:
+        # Horizon changes need a new derived run, not relabeled numbers (spec §13).
+        _err(
+            f"tandem: metrics were computed with horizon {min(stored)}; run "
+            f"`tandem scan --horizon-commits {wanted_horizon}` to derive them for {wanted_horizon}"
+        )
+        return int(ExitCode.INVALID_INPUT)
     if args.format == "json":
         report = build_report(
             repository=cov.repository,
             run=cov.run,
             coverage=cov.to_json(),
-            metrics=[],
+            metrics=[
+                {"scope_kind": "agent", "scope_id": scope, **value}
+                for scope, card in cov.durability.items()
+                for value in card["metrics"].values()
+            ],
             interactions=cov.interactions,
             filters=filters.to_json(),
             caveats=list(CAVEATS),
