@@ -157,3 +157,21 @@ def test_second_scan_waits_on_lock(env: dict[str, Path]) -> None:
     with db.writer_lock(env["db"]), pytest.raises(ScanBusyError):
         scan(env)
     assert scan(env).state == "complete"
+
+
+def test_session_usage_normalization(env: dict[str, Path]) -> None:
+    from tandem.metrics.usage import session_usage
+
+    scan(env)
+    conn = db.connect(env["db"], readonly=True)
+    try:
+        repo_id = conn.execute("SELECT repo_id FROM repositories").fetchone()[0]
+        usage = {u.session: u for u in session_usage(conn, repo_id)}
+    finally:
+        conn.close()
+    claude = usage["claude_code:cc-session-0001"]
+    # Six requests, counted once each: 1200+300+0+80 and five of 40+0+1500+60.
+    assert claude.complete and claude.tokens == 1_580 + 5 * 1_600
+    codex = usage["codex:cx-thread-0098"]
+    # Cached input is part of input; the repeated token_count is skipped.
+    assert codex.complete and codex.tokens == (1000 + 50) + (600 + 70)
