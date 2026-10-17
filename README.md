@@ -6,7 +6,7 @@ Tandem is a local-first analysis tool for developers who run Claude Code and Cod
 
 The repository is the unit of analysis, not the session. Every finding links back to the transcript events and Git revisions that support it.
 
-> **Status: pre-alpha.** `tandem scan` reads Claude Code and Codex logs, matches each agent's edits to Git history, and attributes lines conservatively; `tandem report` shows coverage, attributed lines per agent, and which lines were later removed and by whom. Cross-agent interaction labels (rewrite, revert) and maturity-aware durability metrics are next. `session` and `explain` are still stubs.
+> **Status: pre-alpha.** `tandem scan` reads Claude Code and Codex logs, matches each agent's edits to Git history, attributes lines conservatively, and detects cross-agent interactions (rewrites, removals, exact and partial reverts). `tandem report` shows coverage, attributed lines, and interactions in review order; `tandem explain` and `tandem session` show the evidence behind them. Maturity-aware durability metrics are next.
 
 ## Why
 
@@ -47,6 +47,7 @@ Requires Python 3.11+ and Git 2.31+ on macOS or Linux.
 - Attribution depends on what the agents' logs record. Edits made through shell commands are only attributed when the resulting content and its cause can be established.
 - Survival is exact-text: whitespace and indentation changes count as changes.
 - Intra-file moves, copies, and semantic equivalence are not detected in the first release.
+- Only the first-parent history is walked. With merge commits (for example GitHub pull request merges), each merged branch is analyzed as a single change at its merge commit.
 - Supported agent CLI versions will be listed in [docs/compatibility.md](docs/compatibility.md) once the adapters are validated against real logs.
 
 ## Development
@@ -58,7 +59,7 @@ ruff check .
 mypy
 ```
 
-Project layout follows the module boundaries in [docs/architecture.md](docs/architecture.md). Attribution rules are in [docs/attribution.md](docs/attribution.md) and metric definitions in [docs/metrics.md](docs/metrics.md).
+Project layout follows the module boundaries in [docs/architecture.md](docs/architecture.md). Attribution rules are in [docs/attribution.md](docs/attribution.md), interaction rules in [docs/interactions.md](docs/interactions.md), and metric definitions in [docs/metrics.md](docs/metrics.md).
 
 ## License
 
