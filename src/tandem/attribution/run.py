@@ -1,4 +1,4 @@
-"""Run attribution for one scan and store the results (spec §5, §6, §12).
+"""Run attribution for one scan and store the results.
 
 Edit content is not kept in the database, so each run re-reads the original log
 records for edits placed in this repository, from approved source roots only, and

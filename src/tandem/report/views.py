@@ -2,7 +2,7 @@
 
 All views read the latest completed run. Evidence text comes from the original agent
 logs, re-read from approved roots; the database itself holds no file text. Text from
-logs is untrusted, so terminal control characters are escaped before printing (NFR-03).
+logs is untrusted, so terminal control characters are escaped before printing.
 """
 
 from __future__ import annotations

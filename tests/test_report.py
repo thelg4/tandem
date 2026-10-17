@@ -31,7 +31,7 @@ def test_text_report_order_and_content(
     capsys.readouterr()
     assert main(["report", *_args(env)]) == ExitCode.OK
     out = capsys.readouterr().out
-    # Coverage comes before per-agent numbers (UX-01).
+    # Coverage comes before per-agent numbers.
     assert out.index("Coverage") < out.index("Observed edits") < out.index("Notes")
     assert "claude_code: 1 log file(s)" in out
     assert "Files edited by both agents: 1" in out and "app.py" in out

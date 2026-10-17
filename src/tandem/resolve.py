@@ -1,4 +1,4 @@
-"""Match agent events to the analyzed repository (spec §3 ING-02, ING-03).
+"""Match agent events to the analyzed repository.
 
 Paths come from what the log records: absolute edit paths, or relative paths joined
 to the event's effective working directory. Encoded folder names and substring
@@ -151,7 +151,7 @@ class RepoResolver:
 
 @dataclass(frozen=True, slots=True)
 class Segment:
-    """A contiguous run of one session's events inside the repository (ING-03)."""
+    """A contiguous run of one session's events inside the repository."""
 
     session_id: str
     worktree_id: str | None

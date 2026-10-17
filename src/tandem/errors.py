@@ -1,4 +1,4 @@
-"""Exit codes and error types (spec §13, "Output and failure behavior")."""
+"""Exit codes and error types."""
 
 from __future__ import annotations
 
@@ -39,10 +39,10 @@ class StorageError(TandemError):
 
 
 class SchemaCompatibilityError(StorageError):
-    """Database was written by a newer, unsupported schema (DB-05)."""
+    """Database was written by a newer, unsupported schema."""
 
 
 class ScanBusyError(TandemError):
-    """Another scan holds the single writer lock (spec §11)."""
+    """Another scan holds the single writer lock."""
 
     exit_code = ExitCode.PROCESSING_FAILURE

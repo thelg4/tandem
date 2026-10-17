@@ -1,6 +1,6 @@
-"""Command-line interface (spec §13).
+"""Command-line interface.
 
-Commands: scan, report, session, explain, doctor. ``serve`` is P1 and not exposed yet.
+Commands: audit, scan, report, session, explain, doctor.
 Exit codes: 0 ok (including a marked partial report), 2 invalid input, 3 unavailable
 data, 4 processing failure. Code 1 marks a command not implemented in this build.
 """
@@ -202,7 +202,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         return int(ExitCode.UNAVAILABLE)
     stored = {c["horizon_commits"] for c in cov.durability.values()}
     if wanted_horizon is not None and stored and wanted_horizon not in stored:
-        # Horizon changes need a new derived run, not relabeled numbers (spec §13).
+        # Horizon changes need a new derived run, not relabeled numbers.
         _err(
             f"tandem: metrics were computed with horizon {min(stored)}; run "
             f"`tandem scan --horizon-commits {wanted_horizon}` to derive them for {wanted_horizon}"

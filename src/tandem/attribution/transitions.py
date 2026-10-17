@@ -1,4 +1,4 @@
-"""Reconstruct an observed edit as a full before/after transition (spec §6 ALG-03).
+"""Reconstruct an observed edit as a full before/after transition.
 
 Given the file's current working state (the lines Tandem believes the file held when
 the edit ran), produce the exact lines before and after the edit, or explain why that
@@ -24,7 +24,7 @@ from tandem.model.edits import ChangeType, Hunk, ObservedEdit
 
 
 def to_lines(text: str) -> list[str]:
-    """Split text into lines after normalizing line endings only (ALG-06)."""
+    """Split text into lines after normalizing line endings only."""
     return text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
 
 

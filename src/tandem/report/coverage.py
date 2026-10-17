@@ -1,4 +1,4 @@
-"""Coverage report from the latest completed run (spec §14 UX-01, §5 "Coverage display").
+"""Coverage report from the latest completed run.
 
 Before attribution exists, this reports what the logs show for the repository:
 sources, sessions, observed edits per agent with how strongly each can be

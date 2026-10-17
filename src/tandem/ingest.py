@@ -1,4 +1,4 @@
-"""Scan: bounded, incremental import of agent logs into the repository database (spec §3, §11).
+"""Scan: bounded, incremental import of agent logs into the repository database.
 
 One scan:
 
@@ -7,10 +7,10 @@ One scan:
 2. Skips unchanged sources. A grown source is re-parsed from the start of its current
    generation so calls and results pair across the append; stable event IDs make the
    re-insert idempotent. A rewritten source starts a new generation; old rows are kept,
-   not erased (ING-07).
+   not erased.
 3. Resolves events against the repository and stores only sessions that touched it.
 4. Imports each source in its own transaction, then marks the run complete. A failed
-   run never replaces the latest complete run (DB-04).
+   run never replaces the latest complete run.
 
 Full prompts, responses, and terminal output are not stored. Edits store digests,
 hunk ranges, and change metadata; the source locator links back to the original record.

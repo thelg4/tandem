@@ -13,7 +13,7 @@ change in the cumulative ``total_token_usage``; a drop in the cumulative total s
 new counter segment. ``token_usage_record`` overlaps token_count and is not counted.
 
 Subagent threads begin with history copied from the parent; records before
-``subagent_history_start_ordinal`` are skipped (ING-08).
+``subagent_history_start_ordinal`` are skipped.
 """
 
 from __future__ import annotations
@@ -271,7 +271,7 @@ class CodexAdapter:
             if total_n == st.last_total:
                 return None  # repeated observation of the same counter
             if total_n.get("total_tokens", 0) < st.last_total.get("total_tokens", 0):
-                st.usage_segment += 1  # counter reset (MET-01)
+                st.usage_segment += 1  # counter reset
         st.last_total = total_n
         categories = {k: int(last[k]) for k in USAGE_FIELDS if isinstance(last.get(k), int)}
         return Usage(

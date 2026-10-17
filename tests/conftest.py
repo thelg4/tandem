@@ -12,7 +12,7 @@ from adapter_helpers import FIXTURES
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """NFR-01: core code makes zero outbound network requests. Any attempt fails the test."""
+    """core code makes zero outbound network requests. Any attempt fails the test."""
 
     real_connect = socket.socket.connect
 
