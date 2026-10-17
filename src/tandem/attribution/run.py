@@ -22,10 +22,12 @@ from tandem.attribution.git_history import attribute
 from tandem.config import Policy
 from tandem.git_reader import RENAME_POLICY, CommitMeta, GitReader
 from tandem.globs import matches_any
+from tandem.interactions import Interaction, Window, derive
 from tandem.model.attribution import EvidenceClass
 from tandem.model.edits import ObservedEdit
+from tandem.model.interactions import InteractionLabel
 from tandem.sources.jsonl import read_incremental
-from tandem.versions import ATTRIBUTION_RULES_VERSION
+from tandem.versions import ATTRIBUTION_RULES_VERSION, INTERACTION_RULES_VERSION
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +37,7 @@ class AttributionSummary:
     placed: int
     verified_lines: int
     inserted_lines: int
+    cross_agent_interactions: int = 0
 
 
 def _epoch(utc: str | None) -> float | None:
@@ -50,8 +53,13 @@ def _adapter(provider: str) -> Adapter:
     return ClaudeCodeAdapter() if provider == "claude_code" else CodexAdapter()
 
 
-def _load_edits(conn: sqlite3.Connection, repo_id: str) -> tuple[list[AttrEdit], dict[str, str]]:
-    """Stored in-repo edits joined back to their content in the original logs."""
+def load_edits(
+    conn: sqlite3.Connection, repo_id: str, only: set[str] | None = None
+) -> tuple[list[AttrEdit], dict[str, str]]:
+    """Stored in-repo edits joined back to their content in the original logs.
+
+    ``only`` limits loading to those edit IDs (and the logs that hold them).
+    """
     rows = conn.execute(
         "SELECT d.edit_id, d.path, e.session_id, ss.agent_family, e.utc_timestamp, "
         "e.source_id, e.sequence, s.path AS source_path, s.provider, s.generation, "
@@ -64,7 +72,8 @@ def _load_edits(conn: sqlite3.Connection, repo_id: str) -> tuple[list[AttrEdit],
     ).fetchall()
     by_source: dict[str, list[sqlite3.Row]] = defaultdict(list)
     for row in rows:
-        by_source[row["source_id"]].append(row)
+        if only is None or row["edit_id"] in only:
+            by_source[row["source_id"]].append(row)
 
     edits: list[AttrEdit] = []
     unavailable: dict[str, str] = {}
@@ -120,7 +129,7 @@ def run_attribution(
     def excluded(path: str) -> bool:
         return matches_any(path, policy.exclude_globs)
 
-    edits, unavailable = _load_edits(conn, repo_id)
+    edits, unavailable = load_edits(conn, repo_id)
     result = attribute(
         reader, commits, edits, max_blob_bytes=policy.max_blob_bytes, excluded=excluded
     )
@@ -141,9 +150,12 @@ def run_attribution(
             if path not in tracked or (path in since_index and at >= since_index[path]):
                 untracked += n
     in_range = set(index)
+    window = Window(policy.window_hours, policy.window_commits, policy.window_mode)
+    found = derive(result, {e.edit_id: e for e in edits}, window)
 
     with conn:
         _store(conn, run_id, repo_id, result, unavailable, untracked, commits)
+        _store_interactions(conn, run_id, found, window)
     verified = sum(
         s.count
         for s in result.spans
@@ -162,6 +174,52 @@ def run_attribution(
         placed=placed,
         verified_lines=verified,
         inserted_lines=result.inserted_lines_in_range + untracked,
+        cross_agent_interactions=sum(
+            1 for i in found if i.cross_agent and i.label is not InteractionLabel.OVERLAP_CANDIDATE
+        ),
+    )
+
+
+def _store_interactions(
+    conn: sqlite3.Connection, run_id: int, found: list[Interaction], window: Window
+) -> None:
+    for rank, i in enumerate(found):
+        conn.execute(
+            "INSERT INTO interactions (run_id, interaction_id, original_edit_id, later_edit_id, "
+            "path, original_agent, later_agent, primary_label, tags, evidence_class, "
+            "lines_affected, start_line, block_removed, block_inserted, original_replaced, "
+            "original_inserted, elapsed_seconds, commit_distance, original_commit_id, "
+            "removal_commit_id, recent, review_rank, rule_version) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                run_id,
+                i.interaction_id,
+                i.original_edit,
+                i.later_edit,
+                i.path,
+                i.original_agent,
+                i.later_agent,
+                i.label.value,
+                json.dumps(list(i.tags)),
+                i.evidence.value,
+                i.lines_affected,
+                i.start_line,
+                i.block_removed,
+                i.block_inserted,
+                i.original_replaced,
+                i.original_inserted,
+                i.elapsed_seconds,
+                i.commit_distance,
+                i.original_commit,
+                i.removal_commit,
+                int(i.recent),
+                rank,
+                INTERACTION_RULES_VERSION,
+            ),
+        )
+    conn.execute(
+        "UPDATE run_attribution SET window_hours=?, window_commits=?, window_mode=? WHERE run_id=?",
+        (window.hours, window.commits, window.mode.value, run_id),
     )
 
 

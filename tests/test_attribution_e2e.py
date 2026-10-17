@@ -220,3 +220,78 @@ def test_attribution_reruns_from_cached_evidence(crossed: dict[str, Path]) -> No
         "SELECT run_id, sum(line_count) FROM lineage GROUP BY run_id ORDER BY run_id"
     ).fetchall()
     assert runs == 2 and per_run[0][1] == per_run[1][1]
+
+
+def _scan(crossed: dict[str, Path]) -> list[str]:
+    db = ["--db", str(crossed["db"])]
+    args = [
+        "scan",
+        str(crossed["repo"]),
+        *db,
+        "--claude-root",
+        str(crossed["claude"]),
+        "--codex-root",
+        str(crossed["codex"]),
+    ]
+    assert main(args) == ExitCode.OK
+    return db
+
+
+def test_report_lists_the_interaction(
+    crossed: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = _scan(crossed)
+    capsys.readouterr()
+    main(["report", str(crossed["repo"]), *db, "--format", "json"])
+    data = json.loads(capsys.readouterr().out)
+    (only,) = data["interactions"]
+    assert only["label"] == "rewrite" and only["evidence_class"] == "verified"
+    assert (only["original"]["agent"], only["later"]["agent"]) == ("claude_code", "codex")
+    assert only["commit_distance"] == 1 and only["lines_affected"] == 1
+    summary = data["coverage"]["interaction_summary"]
+    assert summary["cross_agent"] == 1 and summary["by_direction"] == {
+        "codex changed claude_code": {"rewrite": 1}
+    }
+    capsys.readouterr()
+    main(["report", str(crossed["repo"]), *db])
+    text = capsys.readouterr().out
+    assert "Cross-agent interactions: 1" in text
+    assert only["interaction_id"] in text and "tandem explain" in text
+
+
+def test_explain_shows_both_edits_from_their_logs(
+    crossed: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = _scan(crossed)
+    capsys.readouterr()
+    main(["report", str(crossed["repo"]), *db, "--format", "json"])
+    ident = json.loads(capsys.readouterr().out)["interactions"][0]["interaction_id"]
+    assert main(["explain", ident[:6], str(crossed["repo"]), *db]) == ExitCode.OK
+    text = capsys.readouterr().out
+    assert "rewrite · verified · m.py line 2" in text
+    assert "codex changed 1 line(s) that claude_code wrote" in text
+    assert "+    return 1" in text and "-    return 1" in text and "+    return 2" in text
+    assert main(["explain", ident, str(crossed["repo"]), *db, "--format", "json"]) == ExitCode.OK
+    detail = json.loads(capsys.readouterr().out)
+    assert detail["later"]["evidence_source"] == "codex.file_change"
+    assert detail["original"]["log_status"] == "read"
+    assert main(["explain", "zzzz", str(crossed["repo"]), *db]) == ExitCode.INVALID_INPUT
+
+
+def test_session_view(crossed: dict[str, Path], capsys: pytest.CaptureFixture[str]) -> None:
+    db = _scan(crossed)
+    capsys.readouterr()
+    assert main(["session", "cc-1", str(crossed["repo"]), *db]) == ExitCode.OK
+    text = capsys.readouterr().out
+    assert "Session claude_code:cc-1" in text
+    assert "Its lines changed by other sessions: 1" in text
+    assert main(["session", "cx-1", str(crossed["repo"]), *db, "--format", "json"]) == ExitCode.OK
+    view = json.loads(capsys.readouterr().out)
+    assert len(view["interactions_given"]) == 1 and view["edits_by_outcome"] == {"committed": 1}
+    assert main(["session", "nope", str(crossed["repo"]), *db]) == ExitCode.INVALID_INPUT
+
+
+def test_explain_escapes_terminal_controls() -> None:
+    from tandem.report.views import safe
+
+    assert safe("ok\x1b[31mred") == "ok\\x1b[31mred"

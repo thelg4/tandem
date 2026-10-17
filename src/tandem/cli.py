@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import sqlite3
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -168,7 +170,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         a = summary.attribution
         _err(
             f"tandem: attribution over {a.commits_analyzed} commit(s): {a.placed} of {a.edits} "
-            f"edit(s) placed; {a.verified_lines} of {a.inserted_lines} inserted line(s) verified"
+            f"edit(s) placed; {a.verified_lines} of {a.inserted_lines} inserted line(s) verified; "
+            f"{a.cross_agent_interactions} cross-agent interaction(s)"
         )
     if args.strict and summary.state != "complete":
         _err("tandem: --strict: scan coverage is partial")
@@ -202,7 +205,7 @@ def cmd_report(args: argparse.Namespace) -> int:
             run=cov.run,
             coverage=cov.to_json(),
             metrics=[],
-            interactions=[],
+            interactions=cov.interactions,
             filters=filters.to_json(),
             caveats=list(CAVEATS),
         )
@@ -215,14 +218,58 @@ def cmd_report(args: argparse.Namespace) -> int:
     return int(ExitCode.OK)
 
 
+def _open_latest(args: argparse.Namespace) -> sqlite3.Connection | None:
+    git = _git_for(args.path)
+    info = git.discover()
+    path = _db_path(args, info.common_dir)
+    if not path.exists():
+        _err("tandem: no scan yet for this repository; run `tandem scan` first")
+        return None
+    return db.connect(path, readonly=True)
+
+
 def cmd_session(args: argparse.Namespace) -> int:
-    _err(f"tandem: session view for {args.session_id!r} is not implemented yet (B11)")
-    return int(ExitCode.NOT_IMPLEMENTED)
+    from tandem.report.views import find_session, render_session, session_view
+
+    conn = _open_latest(args)
+    if conn is None:
+        return int(ExitCode.UNAVAILABLE)
+    try:
+        found = find_session(conn, args.session_id)
+        if isinstance(found, str):
+            _err(f"tandem: {found}")
+            return int(ExitCode.INVALID_INPUT)
+        view = session_view(conn, found)
+    finally:
+        conn.close()
+    print(
+        json.dumps(view, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_session(view)
+    )
+    return int(ExitCode.OK)
 
 
 def cmd_explain(args: argparse.Namespace) -> int:
-    _err(f"tandem: explain for {args.interaction_id!r} is not implemented yet (B11)")
-    return int(ExitCode.NOT_IMPLEMENTED)
+    from tandem.report.views import explain, find_interaction, render_explain
+
+    conn = _open_latest(args)
+    if conn is None:
+        return int(ExitCode.UNAVAILABLE)
+    try:
+        found = find_interaction(conn, args.interaction_id)
+        if isinstance(found, str):
+            _err(f"tandem: {found}")
+            return int(ExitCode.INVALID_INPUT)
+        detail = explain(conn, found)
+    finally:
+        conn.close()
+    print(
+        json.dumps(detail, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_explain(detail)
+    )
+    return int(ExitCode.OK)
 
 
 # -- parser ---------------------------------------------------------------------------
@@ -298,11 +345,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_report)
 
     p = sub.add_parser("session", help="show one session's edits, attribution and interactions")
-    p.add_argument("session_id")
+    p.add_argument("session_id", help="Tandem session ID, provider session ID, or a prefix")
+    p.add_argument("path", nargs="?", default=".", help="repository (default: current directory)")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--db", metavar="FILE", help="use this database instead of the default")
     p.set_defaults(func=cmd_session)
 
     p = sub.add_parser("explain", help="show the full evidence chain for one interaction")
-    p.add_argument("interaction_id")
+    p.add_argument("interaction_id", help="interaction ID or a unique prefix")
+    p.add_argument("path", nargs="?", default=".", help="repository (default: current directory)")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--db", metavar="FILE", help="use this database instead of the default")
     p.set_defaults(func=cmd_explain)
 
     return parser
