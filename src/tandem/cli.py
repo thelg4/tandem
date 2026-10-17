@@ -170,11 +170,42 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
+    from tandem.report.coverage import CAVEATS, Filters, load, render_text
+    from tandem.report.json_report import build_report, dumps
+
     git = _git_for(args.path)
     info = git.discover()
     load_policy(info.top_level, _policy_overrides(args))
-    _err("tandem: report is not implemented yet (work package B11)")
-    return int(ExitCode.NOT_IMPLEMENTED)
+    path = _db_path(args, info.common_dir)
+    if not path.exists():
+        _err("tandem: no scan yet for this repository; run `tandem scan` first")
+        return int(ExitCode.UNAVAILABLE)
+    filters = Filters(agent=args.agent, session=args.session, file=args.file)
+    conn = db.connect(path, readonly=True)
+    try:
+        cov = load(conn, filters)
+    finally:
+        conn.close()
+    if cov is None:
+        _err("tandem: no completed scan for this repository; run `tandem scan` first")
+        return int(ExitCode.UNAVAILABLE)
+    if args.format == "json":
+        report = build_report(
+            repository=cov.repository,
+            run=cov.run,
+            coverage=cov.to_json(),
+            metrics=[],
+            interactions=[],
+            filters=filters.to_json(),
+            caveats=list(CAVEATS),
+        )
+        print(dumps(report))
+    else:
+        print(render_text(cov, head=info.head, filters=filters))
+    if args.strict and cov.run["state"] != "complete":
+        _err("tandem: --strict: latest scan coverage is partial")
+        return int(ExitCode.UNAVAILABLE)
+    return int(ExitCode.OK)
 
 
 def cmd_session(args: argparse.Namespace) -> int:
