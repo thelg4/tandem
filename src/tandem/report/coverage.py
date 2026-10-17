@@ -65,6 +65,10 @@ class Coverage:
     interactions: list[dict[str, Any]] = field(default_factory=list)
     interaction_summary: dict[str, Any] = field(default_factory=dict)
     durability: dict[str, dict[str, Any]] = field(default_factory=dict)
+    log_ranges: dict[str, dict[str, str | None]] = field(default_factory=dict)
+    """Per agent: earliest and latest record time across all of its readable logs."""
+    log_gaps: list[dict[str, str]] = field(default_factory=list)
+    """Agents whose logs start after part of the analyzed history (logs may be missing)."""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -77,6 +81,8 @@ class Coverage:
             "files_edited_by_both_agents": self.shared_files,
             "usage": self.usage,
             "diagnostics": self.diagnostics,
+            "log_ranges": self.log_ranges,
+            "log_gaps": self.log_gaps,
         }
 
 
@@ -130,6 +136,11 @@ def load(conn: sqlite3.Connection, filters: Filters | None = None) -> Coverage |
 
     for r in conn.execute("SELECT provider, status, count(*) n FROM sources GROUP BY 1, 2"):
         cov.sources.setdefault(r["provider"], {})[r["status"]] = r["n"]
+    for r in conn.execute(
+        "SELECT provider, min(first_record_at) first, max(last_record_at) last FROM sources "
+        "WHERE status = 'active' GROUP BY 1"
+    ):
+        cov.log_ranges[r["provider"]] = {"first": r["first"], "last": r["last"]}
 
     agent_args = (filters.agent,)
     sql = (
@@ -213,7 +224,62 @@ def load(conn: sqlite3.Connection, filters: Filters | None = None) -> Coverage |
     )
     cov.interaction_summary = summarize(cov.interactions)
     cov.durability = durability(conn, int(run["run_id"]), "agent", agent=filters.agent)
+    cov.log_gaps = log_gaps(conn, int(run["run_id"]), cov.log_ranges)
     return cov
+
+
+RETENTION_HINT = {
+    "claude_code": "Claude Code deletes transcripts after 30 days by default; raise "
+    "`cleanupPeriodDays` in ~/.claude/settings.json to keep them.",
+}
+
+
+def log_gaps(
+    conn: sqlite3.Connection, run_id: int, ranges: dict[str, dict[str, str | None]]
+) -> list[dict[str, str]]:
+    """Agents whose earliest log is newer than some analyzed commits.
+
+    Work an agent did before its oldest surviving log cannot be attributed to it, so it
+    shows up as unexplained lines. A gap is a coverage limit, not evidence the agent was
+    used: it is reported only so missing logs are not mistaken for no activity.
+    """
+    meta = conn.execute(
+        "SELECT history_first_at, history_last_at FROM run_attribution WHERE run_id = ?",
+        (run_id,),
+    ).fetchone()
+    if meta is None or not meta["history_first_at"] or not meta["history_last_at"]:
+        return []
+    out = []
+    for agent, rng in sorted(ranges.items()):
+        first = rng.get("first")
+        if not first or first[:10] <= meta["history_first_at"][:10]:
+            continue
+        out.append(
+            {
+                "agent": agent,
+                "logs_start": first[:10],
+                "history_start": meta["history_first_at"][:10],
+                "history_end": meta["history_last_at"][:10],
+                "kind": "all_history" if first > meta["history_last_at"] else "early_history",
+            }
+        )
+    return out
+
+
+def _gap_line(gap: dict[str, str]) -> str:
+    agent, start = gap["agent"], gap["logs_start"]
+    if gap["kind"] == "all_history":
+        text = (
+            f"{agent} logs start {start}, after the last analyzed commit "
+            f"({gap['history_end']}): any {agent} work on this history is not in the logs."
+        )
+    else:
+        text = (
+            f"{agent} logs start {start}, but history starts {gap['history_start']}: "
+            f"{agent} work before {start} is not in the logs and shows as unexplained."
+        )
+    hint = RETENTION_HINT.get(agent)
+    return text + (f" {hint}" if hint else "")
 
 
 def _attribution(conn: sqlite3.Connection, run_id: int, filters: Filters) -> dict[str, Any] | None:
@@ -365,6 +431,8 @@ def render_text(cov: Coverage, *, head: str | None = None, filters: Filters | No
             f"{sess['sessions']} session(s) in this repo, "
             f"{sess['subagent_sessions']} subagent"
         )
+    for gap in cov.log_gaps:
+        lines.append(f"  ! {_gap_line(gap)}")
     lines.append("")
 
     att = cov.attribution

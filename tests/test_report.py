@@ -76,3 +76,58 @@ def test_stale_report_is_flagged(env: dict[str, Path], capsys: pytest.CaptureFix
     capsys.readouterr()
     main(["report", *_args(env)])
     assert "stale" in capsys.readouterr().out
+
+
+def _json_report(env: dict[str, Path], capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
+    capsys.readouterr()
+    assert main(["report", *_args(env), "--format", "json"]) == ExitCode.OK
+    report: dict[str, object] = json.loads(capsys.readouterr().out)
+    return report
+
+
+def test_logs_newer_than_history_are_flagged(
+    env: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The fixture history is dated 2026-01-01 and its logs start in October: the shape
+    # of a repository whose older Claude Code transcripts were deleted.
+    _scan(env)
+    capsys.readouterr()
+    assert main(["report", *_args(env)]) == ExitCode.OK
+    out = capsys.readouterr().out
+    assert "! claude_code logs start 2026-10-01, after the last analyzed commit (2026-01-01)" in out
+    assert "cleanupPeriodDays" in out
+    gaps = _json_report(env, capsys)["coverage"]["log_gaps"]  # type: ignore[index]
+    assert [g["agent"] for g in gaps] == ["claude_code", "codex"]
+    assert all(g["kind"] == "all_history" for g in gaps)
+
+
+def test_no_gap_when_logs_cover_the_history(
+    env: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    for agent_dir in (env["claude"], env["codex"]):
+        for f in agent_dir.rglob("*.jsonl"):
+            f.write_text(f.read_text().replace('"2026-10-0', '"2025-10-0'))
+    _scan(env)
+    gaps = _json_report(env, capsys)["coverage"]["log_gaps"]  # type: ignore[index]
+    assert gaps == []
+
+
+def test_sources_from_older_scans_are_reread_for_record_times(
+    env: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    import sqlite3
+
+    _scan(env)
+    before = _json_report(env, capsys)["coverage"]["edits"]  # type: ignore[index]
+    conn = sqlite3.connect(env["db"])
+    conn.execute("UPDATE sources SET first_record_at = NULL, last_record_at = NULL")
+    conn.commit()
+    conn.close()
+    _scan(env)
+    conn = sqlite3.connect(env["db"])
+    missing = conn.execute("SELECT count(*) FROM sources WHERE first_record_at IS NULL")
+    assert missing.fetchone()[0] == 0
+    conn.close()
+    after = _json_report(env, capsys)["coverage"]["edits"]  # type: ignore[index]
+    assert after == before  # re-reading a source does not duplicate its edits
+    assert after["claude_code"]["in_repository"] > 0

@@ -12,7 +12,7 @@ import json
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from tandem.adapters import AdapterContext, ClaudeCodeAdapter, CodexAdapter
@@ -302,8 +302,8 @@ def _store(
     conn.execute(
         "INSERT INTO run_attribution (run_id, baseline_commit_id, commits_analyzed, "
         "history_truncated, tracked_files, tracked_inserted_lines, untracked_inserted_lines, "
-        "unavailable_paths, rename_policy, diff_policy, rules_version) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "unavailable_paths, rename_policy, diff_policy, rules_version, history_first_at, "
+        "history_last_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             run_id,
             result.baseline_commit,
@@ -316,5 +316,12 @@ def _store(
             RENAME_POLICY,
             DIFF_POLICY,
             ATTRIBUTION_RULES_VERSION,
+            _iso(min(c.commit_time for c in commits)) if commits else None,
+            _iso(max(c.commit_time for c in commits)) if commits else None,
         ),
     )
+
+
+def _iso(epoch: int) -> str:
+    """Commit time in the same UTC text form as log timestamps."""
+    return datetime.fromtimestamp(epoch, UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
