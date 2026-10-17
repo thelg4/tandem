@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+# Distribution name is provisional (spec §2, "Naming and distribution"):
+# confirm availability on PyPI before publishing. The command name is `tandem`.
+name = "tandem-local"
+dynamic = ["version"]
+description = "Local-first provenance and durability analysis for Claude Code and Codex working on the same Git repository."
+readme = "README.md"
+requires-python = ">=3.11"
+# License intentionally unset until chosen (spec §18, "Open decisions").
+authors = [{ name = "Thel Gunter" }]
+keywords = ["claude-code", "codex", "coding-agents", "git", "provenance", "evaluation"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+# Core scan/report keeps dependencies at zero; presentation extras are optional.
+dependencies = []
+
+[project.optional-dependencies]
+rich = ["rich>=13"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+
+[project.scripts]
+tandem = "tandem.cli:main"
+
+[tool.hatch.version]
+path = "src/tandem/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tandem"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
+ignore = ["S101"] # asserts are fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"src/tandem/git_reader.py" = ["S603"] # argument-array subprocess is the intended pattern
+"tests/**" = ["S603", "S607"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["tandem"]
+mypy_path = "src"

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Tandem local data: never commit databases or raw transcripts
+*.sqlite3
+*.sqlite3-*
+*.sqlite3.lock
+*.bak
+tests/fixtures/raw/
+
+# Private planning documents
+*.docx
+.DS_Store
