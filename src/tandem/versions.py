@@ -19,8 +19,8 @@ REPORT_FORMAT_VERSION: Final = "0.1"
 """Machine-readable JSON report contract (`tandem report --format json`)."""
 
 ADAPTER_VERSIONS: Final[dict[str, str]] = {
-    "claude_code": "0.0.0",
-    "codex": "0.0.0",
+    "claude_code": "0.1.0",
+    "codex": "0.1.0",
 }
 
 ATTRIBUTION_RULES_VERSION: Final = "0.0.0"

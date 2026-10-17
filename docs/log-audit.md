@@ -86,3 +86,21 @@ Usage sits on `assistant` records in `message.usage` (`input_tokens`, `cache_cre
 3. **Usage:** dedupe Claude Code by `requestId`; use Codex per-call deltas.
 4. **Fixtures:** build synthetic fixtures that mirror these shapes (no real content), one family per era above.
 5. **Still to audit:** desktop Claude Code transcripts. The folder is protected from remote access, so this needs to run locally (for example `tandem doctor` plus an audit command run on the Mac).
+
+## Adapter validation against real logs
+
+Run 2026-10-17 with adapters 0.1.0, counts only.
+
+| | Codex (13 rollouts) | Claude Code (1 transcript) |
+| --- | --- | --- |
+| Malformed records | 0 | 0 |
+| Edits recovered | 357 | 56 |
+| From numbered diffs | 272 `FileChange` (101 linked by call ID, 171 by source order) | 56 `toolUseResult` |
+| From patch text | 85 (0.94-era sessions, unnumbered hunks) | — |
+| Failed edit calls | 3 apply_patch failures, no edits emitted | 0 failed edits |
+| Reconstruction check | — | 7 of 7 updates rebuild exactly from `originalFile` + patch |
+| Subagent prefix records skipped | 6 sessions | — |
+
+Takeaways:
+- Nearly half of Codex edits (171 of 357) are linked to their tool call only by position in the log, because they ran inside `exec` code cells. They are tagged `linked_by_source_order` so attribution can treat that link as weaker than an ID match.
+- `exec` cell outputs carry no exit code, so their status is `unknown`; the `FileChange` items that follow them are the success evidence.
