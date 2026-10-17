@@ -289,6 +289,52 @@ class GitReader:
         mode, kind, oid = meta.split(" ")
         return oid if kind == "blob" and mode in ("100644", "100755") else None
 
+    def added_lines_by_commit(
+        self, target: str, *, max_count: int, include: Callable[[str], bool]
+    ) -> dict[str, int]:
+        """Inserted text lines per first-parent commit, in one ``git log`` call.
+
+        Merge commits are measured against their first parent. Binary changes and paths
+        ``include`` rejects are not counted.
+        """
+        _check_oid(target)
+        out = self.run(
+            "log",
+            "-z",
+            "--first-parent",
+            "--diff-merges=first-parent",
+            "--root",
+            "--numstat",
+            "--no-ext-diff",
+            "--no-textconv",
+            f"-M{RENAME_POLICY}",
+            f"--max-count={max_count}",
+            "--format=%x1e%H",
+            "--end-of-options",
+            target,
+        ).stdout.decode("utf-8", "surrogateescape")
+        counts: dict[str, int] = {}
+        for chunk in filter(None, out.split("\x1e")):
+            oid, _, body = chunk.partition("\0")
+            fields = body.split("\0")
+            total, i = 0, 0
+            while i < len(fields):
+                head = fields[i].lstrip("\n")
+                if not head:
+                    i += 1
+                    continue
+                parts = head.split("\t")
+                if len(parts) == 3 and parts[2] == "":
+                    path = fields[i + 2] if i + 2 < len(fields) else ""
+                    i += 3
+                else:
+                    path = parts[2] if len(parts) > 2 else ""
+                    i += 1
+                if parts[0] != "-" and include(path):
+                    total += int(parts[0])
+            counts[oid.strip()] = total
+        return counts
+
 
 RENAME_POLICY = "100%"
 """Exact-content renames only (ALG-07). Recorded in run manifests."""

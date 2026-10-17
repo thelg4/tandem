@@ -106,3 +106,14 @@ def test_history_and_deltas(git_repo: tuple[Path, object]) -> None:
     assert reader.added_lines(history[2], lambda p: p != "c.py") == 1
     assert reader.added_lines(history[0], lambda p: True) == 2  # binary not counted
     assert len(reader.history(history[-1].oid, max_count=2)) == 2
+
+
+def test_added_lines_by_commit_matches_per_commit(
+    repo_with_history: tuple[Path, list[str]],
+) -> None:
+    repo, commits = repo_with_history
+    reader = GitReader(repo)
+    history = reader.history(commits[-1], max_count=10)
+    bulk = reader.added_lines_by_commit(commits[-1], max_count=10, include=lambda p: True)
+    assert bulk == {c.oid: reader.added_lines(c, lambda p: True) for c in history}
+    assert bulk[commits[0]] == 2

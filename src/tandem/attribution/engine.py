@@ -34,9 +34,10 @@ from enum import StrEnum
 from tandem.attribution.transitions import Transition, Unplaceable, reconstruct
 from tandem.git_reader import CommitMeta, FileDelta
 from tandem.model.attribution import EvidenceClass
+from tandem.versions import ATTRIBUTION_RULES_VERSION
 
 DIFF_POLICY = "difflib.SequenceMatcher(autojunk=False), exact text after newline normalization"
-RULES_VERSION = "0.1.0"
+RULES_VERSION = ATTRIBUTION_RULES_VERSION
 
 
 class OriginKind(StrEnum):

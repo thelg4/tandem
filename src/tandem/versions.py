@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Final
 
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
 """SQLite schema version. Matches the highest migration in storage/migrations."""
 
 EVENT_ENVELOPE_VERSION: Final = "1"
@@ -23,7 +23,7 @@ ADAPTER_VERSIONS: Final[dict[str, str]] = {
     "codex": "0.1.0",
 }
 
-ATTRIBUTION_RULES_VERSION: Final = "0.0.0"
+ATTRIBUTION_RULES_VERSION: Final = "0.1.0"
 INTERACTION_RULES_VERSION: Final = "0.0.0"
 METRIC_DEFINITIONS_VERSION: Final = "0.0.0"
 

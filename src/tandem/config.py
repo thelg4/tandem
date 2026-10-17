@@ -61,6 +61,8 @@ class Policy:
     max_blob_bytes: int = 2 * 1024 * 1024
     max_record_bytes: int = 8 * 1024 * 1024
     git_timeout_seconds: float = 60.0
+    max_history_commits: int = 2000
+    """Newest first-parent commits analyzed; older history is reported as truncated."""
     claude_root: Path | None = None
     codex_root: Path | None = None
     allow_execution: bool = False
@@ -68,6 +70,8 @@ class Policy:
     sources: tuple[str, ...] = field(default=("defaults",))
 
     def validate(self) -> Policy:
+        if self.max_history_commits < 1:
+            raise InvalidInputError("max_history_commits must be >= 1")
         if self.horizon_commits < 1:
             raise InvalidInputError("horizon_commits must be >= 1")
         if self.window_hours <= 0 or self.window_commits < 1:
