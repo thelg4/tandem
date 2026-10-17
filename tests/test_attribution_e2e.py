@@ -295,3 +295,51 @@ def test_explain_escapes_terminal_controls() -> None:
     from tandem.report.views import safe
 
     assert safe("ok\x1b[31mred") == "ok\\x1b[31mred"
+
+
+def test_durability_metrics_end_to_end(
+    crossed: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = ["--db", str(crossed["db"])]
+    args = [
+        "scan",
+        str(crossed["repo"]),
+        *db,
+        "--claude-root",
+        str(crossed["claude"]),
+        "--codex-root",
+        str(crossed["codex"]),
+        "--horizon-commits",
+        "1",
+    ]
+    assert main(args) == ExitCode.OK
+    capsys.readouterr()
+    main(["report", str(crossed["repo"]), *db, "--format", "json"])
+    data = json.loads(capsys.readouterr().out)
+    claude = data["coverage"]["durability"]["claude_code"]
+    m = claude["metrics"]
+    assert (m["survival_at_n"]["numerator"], m["survival_at_n"]["denominator"]) == (1, 2)
+    assert (m["churn_received"]["numerator"], m["churn_received"]["denominator"]) == (1, 2)
+    assert m["churn_received_interactions"]["numerator"] == 1
+    assert (m["exact_revert_rate"]["numerator"], m["exact_revert_rate"]["denominator"]) == (0, 1)
+    assert m["tokens_per_surviving_line"]["status"] == "unavailable"  # no usage in fixture logs
+    assert not claude["comparable"]
+    codex = data["coverage"]["durability"]["codex"]
+    assert codex["metrics"]["survival_at_n"]["status"] == "pending" and codex["pending_lines"] == 1
+    assert any(
+        x["scope_id"] == "claude_code" and x["name"] == "survival_at_n" for x in data["metrics"]
+    )
+
+    capsys.readouterr()
+    main(["report", str(crossed["repo"]), *db])
+    text = capsys.readouterr().out
+    assert "Durability (horizon 1 first-parent commits" in text
+    assert "survival at 1: 1 / 2 = 50.0%" in text and "small sample" in text
+    assert text.index("Attribution coverage") < text.index("Durability")
+
+    assert main(["report", str(crossed["repo"]), *db, "--horizon-commits", "5"]) == (
+        ExitCode.INVALID_INPUT
+    )
+    capsys.readouterr()
+    main(["session", "cc-1", str(crossed["repo"]), *db])
+    assert "survival at 1: 1 / 2 = 50.0%" in capsys.readouterr().out

@@ -23,7 +23,14 @@ class MetricStatus(StrEnum):
 class MetricName(StrEnum):
     SURVIVAL = "survival_at_n"
     CHURN_RECEIVED = "churn_received"
+    """Cohort churn rate: mature lines changed by the other agent before their endpoint."""
+    CHURN_INTERACTIONS = "churn_received_interactions"
+    """Count of verified cross-agent interactions received (no denominator)."""
+    CHURN_LINES = "churn_received_lines"
+    """Unique original line instances the other agent affected at least once (no denominator)."""
     EXACT_REVERT_RATE = "exact_revert_rate"
+    PARTIAL_REVERTS = "partial_revert_groups"
+    """Mature change groups partly restored by the other agent (no denominator)."""
     TOKENS_PER_SURVIVING_LINE = "tokens_per_surviving_line"
 
 
@@ -77,10 +84,21 @@ class MetricValue:
             exclusions=dict(exclusions or {}),
         )
 
+    @classmethod
+    def count(cls, name: MetricName, value: int, horizon_commits: int) -> MetricValue:
+        """A plain count with no denominator."""
+        return cls(name, MetricStatus.COMPLETE, value, None, horizon_commits)
+
     def display(self) -> str:
         if self.status in (MetricStatus.PENDING, MetricStatus.UNAVAILABLE):
             return self.status.value
+        if self.denominator is None and self.numerator is not None:
+            return str(self.numerator)
         ratio = self.ratio
         if ratio is None:
+            if self.name is MetricName.TOKENS_PER_SURVIVING_LINE and self.numerator:
+                return f"{self.numerator:,} tokens, no surviving lines"
             return "n/a"
+        if self.name is MetricName.TOKENS_PER_SURVIVING_LINE:
+            return f"{self.numerator:,} / {self.denominator} = {float(ratio):,.0f} per line"
         return f"{self.numerator} / {self.denominator} = {float(ratio) * 100:.1f}%"

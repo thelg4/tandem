@@ -41,7 +41,7 @@ def build_report(
     repository: dict[str, Any],
     run: dict[str, Any] | None,
     coverage: dict[str, Any],
-    metrics: list[MetricValue],
+    metrics: list[dict[str, Any]],
     interactions: list[dict[str, Any]],
     filters: dict[str, Any],
     caveats: list[str],
@@ -53,7 +53,7 @@ def build_report(
         "run": run,
         "filters": filters,
         "coverage": coverage,
-        "metrics": [metric_to_json(m) for m in metrics],
+        "metrics": metrics,
         "interactions": interactions,
         "caveats": caveats,
     }
