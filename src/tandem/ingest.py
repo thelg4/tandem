@@ -30,6 +30,7 @@ from typing import Any
 
 from tandem.adapters import AdapterContext, ClaudeCodeAdapter, CodexAdapter
 from tandem.adapters.base import Adapter
+from tandem.attribution.run import AttributionSummary, run_attribution
 from tandem.config import Policy
 from tandem.diffs import ApplyError, apply_hunks
 from tandem.errors import TandemError
@@ -84,6 +85,7 @@ class ScanSummary:
     edits: Counter[str] = field(default_factory=Counter)
     quarantined_records: int = 0
     diagnostics: int = 0
+    attribution: AttributionSummary | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +95,7 @@ class ScanOptions:
     codex_root: Path | None = None
     include_worktrees: bool = False
     rebuild: bool = False
+    since: str | None = None
 
 
 def _adapter(agent: AgentFamily) -> Adapter:
@@ -180,6 +183,10 @@ class Scanner:
                 manifest_sources.append(entry)
             seen = {source_id_for(s.agent.value, s.path) for s in snapshot}
             self._mark_missing(conn, run_id, seen, summary)
+            since = self.git.resolve_commit(options.since) if options.since else None
+            summary.attribution = run_attribution(
+                conn, self.git, run_id, repo_id, target, self.policy, since=since
+            )
         except BaseException:
             with conn:
                 conn.execute(
@@ -200,6 +207,7 @@ class Scanner:
             "target_commit": target,
             "ref": options.ref,
             "include_worktrees": options.include_worktrees,
+            "since": options.since,
             "sources": manifest_sources,
             "policy": {k: v for k, v in asdict(self.policy).items() if k != "sources"},
             "versions": manifest_versions(),

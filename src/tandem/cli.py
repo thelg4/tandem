@@ -154,6 +154,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         codex_root=_opt_path(args.codex_root),
         include_worktrees=args.include_worktrees,
         rebuild=args.rebuild,
+        since=args.since,
     )
     summary = Scanner(info.top_level, policy, path).run(options)
     sources = ", ".join(f"{v} {k}" for k, v in sorted(summary.sources.items())) or "none found"
@@ -163,6 +164,12 @@ def cmd_scan(args: argparse.Namespace) -> int:
     _err(f"tandem: sessions touching this repo: {sessions}; new events: {summary.events_inserted}")
     if summary.quarantined_records:
         _err(f"tandem: {summary.quarantined_records} malformed record(s) quarantined")
+    if summary.attribution is not None:
+        a = summary.attribution
+        _err(
+            f"tandem: attribution over {a.commits_analyzed} commit(s): {a.placed} of {a.edits} "
+            f"edit(s) placed; {a.verified_lines} of {a.inserted_lines} inserted line(s) verified"
+        )
     if args.strict and summary.state != "complete":
         _err("tandem: --strict: scan coverage is partial")
         return int(ExitCode.UNAVAILABLE)

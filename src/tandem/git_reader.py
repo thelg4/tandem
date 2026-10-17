@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -199,3 +200,208 @@ class GitReader:
             for line in out.splitlines()
             if line.startswith("worktree ")
         ]
+
+    # -- history (B06) --------------------------------------------------------------------
+
+    def history(self, target: str, *, max_count: int) -> list[CommitMeta]:
+        """First-parent commits ending at ``target``, oldest first, newest ``max_count`` kept."""
+        _check_oid(target)
+        out = self.run(
+            "log",
+            "-z",
+            "--first-parent",
+            "--no-show-signature",
+            f"--max-count={max_count}",
+            "--format=%H%x1f%P%x1f%T%x1f%ct",
+            "--end-of-options",
+            target,
+        ).stdout.decode("utf-8", "surrogateescape")
+        commits = []
+        for entry in filter(None, out.split("\0")):
+            oid, parents, tree, ctime = entry.strip("\n").split("\x1f")
+            commits.append(CommitMeta(oid, tuple(parents.split()), tree, int(ctime)))
+        commits.reverse()
+        return commits
+
+    def file_deltas(self, commit: CommitMeta) -> list[FileDelta]:
+        """Files changed against the first parent. Renames: exact (100%) matches only."""
+        args = [
+            "diff-tree",
+            "--no-commit-id",
+            "-r",
+            "-z",
+            "--raw",
+            "--no-ext-diff",
+            "--no-textconv",
+            f"-M{RENAME_POLICY}",
+        ]
+        args += [commit.parents[0], commit.oid] if commit.parents else ["--root", commit.oid]
+        out = self.run(*args).stdout.decode("utf-8", "surrogateescape")
+        return _parse_raw(out)
+
+    def added_lines(self, commit: CommitMeta, include: Callable[[str], bool]) -> int | None:
+        """Inserted text lines in ``commit`` for paths ``include`` accepts (coverage denominator).
+
+        Returns None when the commit has binary changes that cannot be counted.
+        """
+        args = [
+            "diff-tree",
+            "--no-commit-id",
+            "-r",
+            "-z",
+            "--numstat",
+            "--no-ext-diff",
+            "--no-textconv",
+            f"-M{RENAME_POLICY}",
+        ]
+        args += [commit.parents[0], commit.oid] if commit.parents else ["--root", commit.oid]
+        out = self.run(*args).stdout.decode("utf-8", "surrogateescape")
+        total = 0
+        fields = out.split("\0")
+        i = 0
+        while i < len(fields):
+            head = fields[i]
+            if not head.strip():
+                i += 1
+                continue
+            parts = head.split("\t")
+            if len(parts) == 3 and parts[2] == "":  # rename: paths follow as two fields
+                path = fields[i + 2] if i + 2 < len(fields) else ""
+                i += 3
+            else:
+                path = parts[2] if len(parts) > 2 else ""
+                i += 1
+            if parts[0] == "-" or not include(path):
+                continue
+            total += int(parts[0])
+        return total
+
+    def blob_at(self, commit: str, path: str) -> str | None:
+        """Blob ID of a regular file at ``path`` in ``commit``, or None."""
+        _check_oid(commit)
+        if not path or "\0" in path or "\n" in path:
+            raise InvalidInputError("invalid path")
+        out = self.run("ls-tree", "-z", "--full-tree", commit, "--", path).stdout
+        entry = out.decode("utf-8", "surrogateescape").split("\0", 1)[0]
+        if not entry:
+            return None
+        meta, _, _name = entry.partition("\t")
+        mode, kind, oid = meta.split(" ")
+        return oid if kind == "blob" and mode in ("100644", "100755") else None
+
+    def added_lines_by_commit(
+        self, target: str, *, max_count: int, include: Callable[[str], bool]
+    ) -> dict[str, dict[str, int]]:
+        """Inserted text lines per first-parent commit and path, in one ``git log`` call.
+
+        Merge commits are measured against their first parent. Binary changes and paths
+        ``include`` rejects are not counted.
+        """
+        _check_oid(target)
+        out = self.run(
+            "log",
+            "-z",
+            "--first-parent",
+            "--diff-merges=first-parent",
+            "--root",
+            "--numstat",
+            "--no-ext-diff",
+            "--no-textconv",
+            f"-M{RENAME_POLICY}",
+            f"--max-count={max_count}",
+            "--format=%x1e%H",
+            "--end-of-options",
+            target,
+        ).stdout.decode("utf-8", "surrogateescape")
+        counts: dict[str, dict[str, int]] = {}
+        for chunk in filter(None, out.split("\x1e")):
+            oid, _, body = chunk.partition("\0")
+            fields = body.split("\0")
+            per_path: dict[str, int] = {}
+            i = 0
+            while i < len(fields):
+                head = fields[i].lstrip("\n")
+                if not head:
+                    i += 1
+                    continue
+                parts = head.split("\t")
+                if len(parts) == 3 and parts[2] == "":
+                    path = fields[i + 2] if i + 2 < len(fields) else ""
+                    i += 3
+                else:
+                    path = parts[2] if len(parts) > 2 else ""
+                    i += 1
+                if parts[0] != "-" and include(path):
+                    per_path[path] = per_path.get(path, 0) + int(parts[0])
+            counts[oid.strip()] = per_path
+        return counts
+
+
+RENAME_POLICY = "100%"
+"""Exact-content renames only (ALG-07). Recorded in run manifests."""
+
+_OID = re.compile(r"^[0-9a-f]{4,128}$")
+
+
+def _check_oid(oid: str) -> None:
+    if not _OID.match(oid):
+        raise InvalidInputError(f"invalid object id: {oid!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class CommitMeta:
+    oid: str
+    parents: tuple[str, ...]
+    tree: str
+    commit_time: int
+    """Committer time (epoch seconds). Metadata, not a causal clock (ALG-02)."""
+
+
+@dataclass(frozen=True, slots=True)
+class FileDelta:
+    status: str
+    """A added, M modified, D deleted, R renamed (exact), T type change."""
+    path: str
+    old_path: str | None
+    old_blob: str | None
+    new_blob: str | None
+    old_mode: str
+    new_mode: str
+
+    @property
+    def is_regular_file(self) -> bool:
+        return all(m in ("100644", "100755", "000000") for m in (self.old_mode, self.new_mode))
+
+
+_NULL_OID = re.compile(r"^0+$")
+
+
+def _parse_raw(out: str) -> list[FileDelta]:
+    fields = out.split("\0")
+    deltas: list[FileDelta] = []
+    i = 0
+    while i < len(fields):
+        head = fields[i]
+        if not head.startswith(":"):
+            i += 1
+            continue
+        old_mode, new_mode, old_oid, new_oid, status = head[1:].split(" ")
+        kind = status[0]
+        if kind in ("R", "C"):
+            old_path, path = fields[i + 1], fields[i + 2]
+            i += 3
+        else:
+            old_path, path = None, fields[i + 1]
+            i += 2
+        deltas.append(
+            FileDelta(
+                status=kind,
+                path=path,
+                old_path=old_path if kind == "R" else None,
+                old_blob=None if _NULL_OID.match(old_oid) else old_oid,
+                new_blob=None if _NULL_OID.match(new_oid) else new_oid,
+                old_mode=old_mode,
+                new_mode=new_mode,
+            )
+        )
+    return deltas

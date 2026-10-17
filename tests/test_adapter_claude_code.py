@@ -89,3 +89,29 @@ def test_ordering_and_ids_are_stable() -> None:
     assert [e.identity.event_id for e in first] == [e.identity.event_id for e in second]
     sequences = [e.order.sequence for e in first]
     assert sequences == sorted(sequences) and len(set(sequences)) == len(sequences)
+
+
+def test_sidechain_records_form_a_distinct_child_session() -> None:
+    from tandem.adapters.base import AdapterContext
+    from tandem.sources.jsonl import Record
+
+    base = {"sessionId": "s1", "cwd": "/w", "timestamp": "2026-10-01T00:00:00Z"}
+    records = [
+        Record(0, 10, {**base, "type": "user", "message": {"role": "user", "content": "hi"}}),
+        Record(
+            10,
+            10,
+            {
+                **base,
+                "type": "user",
+                "isSidechain": True,
+                "agentId": "ag1",
+                "message": {"role": "user", "content": "task"},
+            },
+        ),
+    ]
+    ctx = AdapterContext("src", 0, "/x.jsonl")
+    main, sub = (e.actor for e in ClaudeCodeAdapter().parse(records, ctx))
+    assert (main.session_id, main.provider_session_id) == ("claude_code:s1", "s1")
+    assert (sub.session_id, sub.provider_session_id) == ("claude_code:s1/ag1", "s1/ag1")
+    assert sub.parent_session_id == main.session_id
