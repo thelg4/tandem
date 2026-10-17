@@ -180,7 +180,8 @@ def claude_code_2_1() -> list[dict[str, Any]]:
 
 
 class Rollout:
-    def __init__(self, start_ordinal: int = 0) -> None:
+    def __init__(self, thread: str, start_ordinal: int = 0) -> None:
+        self.thread = thread
         self.records: list[dict[str, Any]] = []
         self.ordinal = start_ordinal
 
@@ -197,7 +198,7 @@ class Rollout:
         self.add(
             "session_meta",
             {
-                "id": "cx-thread-0001",
+                "id": self.thread,
                 "session_id": "cx-session-0001",
                 "timestamp": "2026-10-02T09:00:00Z",
                 "cwd": CWD,
@@ -239,7 +240,7 @@ class Rollout:
         )
 
     def file_change(self, item_id: str, changes: dict[str, Any]) -> None:
-        self.add("event_msg", {"type": "item_completed", "thread_id": "cx-thread-0001",
+        self.add("event_msg", {"type": "item_completed", "thread_id": self.thread,
                                "turn_id": "t1", "completed_at_ms": 0, "item": {
                                    "type": "FileChange", "id": item_id, "changes": changes,
                                    "status": "completed", "stdout": ""}})  # fmt: skip
@@ -274,7 +275,7 @@ PATCH_BAD = """*** Begin Patch
 
 
 def codex_0_98() -> list[dict[str, Any]]:
-    r = Rollout()
+    r = Rollout("cx-thread-0098")
     r.meta("0.98.0")
     r.turn("t1")
     r.add(
@@ -324,7 +325,7 @@ def codex_0_98() -> list[dict[str, Any]]:
 
 
 def codex_0_144() -> list[dict[str, Any]]:
-    r = Rollout()
+    r = Rollout("cx-thread-0144")
     r.meta("0.144.0-alpha.4")
     r.turn("t1")
     r.add("response_item", {"type": "custom_tool_call", "status": "completed", "call_id": "call_a1",
@@ -353,7 +354,7 @@ def codex_0_144() -> list[dict[str, Any]]:
 
 
 def codex_0_153_subagent() -> list[dict[str, Any]]:
-    r = Rollout()
+    r = Rollout("cx-thread-0153")
     r.meta("0.153.4", parent_thread_id="cx-thread-parent", subagent_history_start_ordinal=4)
     # Ordinals 1-3 are history copied from the parent thread; they must not count again.
     r.turn("t0")

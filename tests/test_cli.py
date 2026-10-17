@@ -38,13 +38,14 @@ def test_missing_path_is_invalid_input(tmp_path: Path) -> None:
     assert main(["doctor", str(tmp_path / "nope")]) == ExitCode.INVALID_INPUT
 
 
-def test_scan_prepares_database_and_reports_stub(
+def test_scan_without_logs_is_partial_not_an_error(
     repo_with_history: tuple[Path, list[str]], tmp_path: Path
 ) -> None:
     repo, _ = repo_with_history
     dbfile = tmp_path / "scan.sqlite3"
-    assert main(["scan", str(repo), "--db", str(dbfile)]) == ExitCode.NOT_IMPLEMENTED
+    assert main(["scan", str(repo), "--db", str(dbfile)]) == ExitCode.OK
     assert dbfile.exists()
+    assert main(["scan", str(repo), "--db", str(dbfile), "--strict"]) == ExitCode.UNAVAILABLE
 
 
 def test_scan_rejects_unsafe_ref(repo_with_history: tuple[Path, list[str]]) -> None:

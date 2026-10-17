@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Final
 
-SCHEMA_VERSION: Final = 1
+SCHEMA_VERSION: Final = 2
 """SQLite schema version. Matches the highest migration in storage/migrations."""
 
 EVENT_ENVELOPE_VERSION: Final = "1"
