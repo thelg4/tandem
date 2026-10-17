@@ -276,6 +276,19 @@ class GitReader:
             total += int(parts[0])
         return total
 
+    def blob_at(self, commit: str, path: str) -> str | None:
+        """Blob ID of a regular file at ``path`` in ``commit``, or None."""
+        _check_oid(commit)
+        if not path or "\0" in path or "\n" in path:
+            raise InvalidInputError("invalid path")
+        out = self.run("ls-tree", "-z", "--full-tree", commit, "--", path).stdout
+        entry = out.decode("utf-8", "surrogateescape").split("\0", 1)[0]
+        if not entry:
+            return None
+        meta, _, _name = entry.partition("\t")
+        mode, kind, oid = meta.split(" ")
+        return oid if kind == "blob" and mode in ("100644", "100755") else None
+
 
 RENAME_POLICY = "100%"
 """Exact-content renames only (ALG-07). Recorded in run manifests."""
