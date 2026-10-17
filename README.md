@@ -6,7 +6,7 @@ Tandem is a local-first analysis tool for developers who run Claude Code and Cod
 
 The repository is the unit of analysis, not the session. Every finding links back to the transcript events and Git revisions that support it.
 
-> **Status: pre-alpha.** `tandem scan` reads Claude Code and Codex logs, matches each agent's edits to Git history, attributes lines conservatively, and detects cross-agent interactions (rewrites, removals, exact and partial reverts). `tandem report` shows coverage, attributed lines, and interactions in review order; `tandem explain` and `tandem session` show the evidence behind them. Maturity-aware durability metrics are next.
+> **Status: pre-alpha.** `tandem scan` reads Claude Code and Codex logs, matches each agent's edits to Git history, attributes lines conservatively, and detects cross-agent interactions (rewrites, removals, exact and partial reverts). `tandem report` shows coverage, attributed lines, interactions in review order, and maturity-aware durability scorecards per agent; `tandem explain` and `tandem session` show the evidence behind them, including per-session durability.
 
 ## Why
 
