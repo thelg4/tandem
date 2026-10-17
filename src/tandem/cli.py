@@ -115,7 +115,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     else:
         line("info", "database", f"will be created at {path} on first scan")
 
-    line("info", "adapters", "Claude Code and Codex parsers are not implemented yet (B03)")
+    line("info", "adapters", "run `tandem audit` to check what your agent logs record")
     return int(ExitCode.OK if ok else ExitCode.PROCESSING_FAILURE)
 
 
@@ -126,6 +126,19 @@ def _opt_path(value: str | None) -> Path | None:
 def _policy_overrides(args: argparse.Namespace) -> dict[str, Any]:
     keys = ("horizon_commits", "window_hours", "window_commits", "window_mode", "confidence")
     return {k: getattr(args, k, None) for k in keys}
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    from tandem.audit import audit_root, render_json, render_text
+
+    if args.limit is not None and args.limit < 1:
+        raise InvalidInputError("--limit must be at least 1")
+    roots = resolve_roots(_opt_path(args.claude_root), _opt_path(args.codex_root))
+    audits = [audit_root(root, limit=args.limit) for root in roots]
+    print(render_json(audits) if args.format == "json" else render_text(audits))
+    if not any(a.root_found for a in audits):
+        return int(ExitCode.UNAVAILABLE)
+    return int(ExitCode.OK)
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
@@ -202,6 +215,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("path", nargs="?", default=".")
     _add_source_roots(p)
     p.set_defaults(func=cmd_doctor)
+
+    p = sub.add_parser(
+        "audit", help="summarize local agent log structure (no prompts, code, or paths)"
+    )
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--limit", type=int, metavar="N", help="audit at most N files per agent")
+    p.set_defaults(func=cmd_audit)
 
     p = sub.add_parser("scan", help="read bounded logs and Git history; derive a report")
     p.add_argument("path", nargs="?", default=".")

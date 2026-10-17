@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from tandem.model.edits import ObservedEdit
 from tandem.versions import EVENT_ENVELOPE_VERSION
 
 
@@ -163,3 +164,5 @@ class Event:
     evidence: Evidence
     content: Content | None = None
     usage: Usage | None = None
+    edit: ObservedEdit | None = None
+    """Set on TEXT_EDIT events: one file changed by one successful edit."""

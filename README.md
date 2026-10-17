@@ -6,7 +6,7 @@ Tandem is a local-first analysis tool for developers who run Claude Code and Cod
 
 The repository is the unit of analysis, not the session. Every finding links back to the transcript events and Git revisions that support it.
 
-> **Status: pre-alpha scaffold.** The CLI, configuration, storage schema, Git reader, and incremental log reader are in place. The Claude Code and Codex parsers, attribution, interaction detection, and metrics are not implemented yet. The commands below describe the intended product. `tandem doctor` works today; the other commands are stubs that exit with a "not implemented" message.
+> **Status: pre-alpha.** Log reading and both agent parsers work: Tandem can read Claude Code and Codex logs and recover each agent's file edits. Attribution against Git history, interaction detection, and metrics are not implemented yet. `tandem doctor` and `tandem audit` work today; `scan`, `report`, `session`, and `explain` are stubs that exit with a "not implemented" message.
 
 ## Why
 
@@ -25,6 +25,7 @@ High survival describes persistence. It does not prove correctness or show that 
 ```sh
 pip install -e .            # distribution name not yet published
 tandem doctor .             # check git, repository, log sources, database
+tandem audit                # what your agent logs record (structure only, safe to share)
 tandem scan .               # read bounded logs and Git history
 tandem report .             # coverage, scorecards, interactions
 tandem explain <interaction-id>
