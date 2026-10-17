@@ -140,6 +140,8 @@ class _File:
     """Committed lines an agent edit removed in the working state: (line, edit_id)."""
     states: list[tuple[str, str | None]] = field(default_factory=list)
     """Digest of each working state with the session that produced it."""
+    applied: list[str] = field(default_factory=list)
+    """Edits applied to the working state since the last commit that touched the file."""
 
 
 def _digest(lines: list[str] | None) -> str:
@@ -299,6 +301,7 @@ class Engine:
             result.lines_removed += before_count - (len(new) - inserted)
         state.working, state.dirty = new, True
         state.states.append((_digest(_texts(new)), e.session_id))
+        state.applied.append(e.edit_id)
         result.evidence = evidence
         result.reasons.extend(r for r in reasons if r not in result.reasons)
         if result.lines_inserted == 0 and result.lines_removed == 0:
@@ -409,8 +412,14 @@ class Engine:
                 line.commit = commit.oid
                 self.result.inserted_lines_in_range += 1
                 self._credit_commit(line, commit)
+        for edit_id in state.applied:
+            r = self.result.edits[edit_id]
+            if r.outcome is Outcome.UNCOMMITTED and r.lines_inserted == 0:
+                # A removal-only edit has landed once a commit reconciles its file.
+                r.outcome = Outcome.COMMITTED
+                r.anchor_commit = r.anchor_commit or commit.oid
         state.committed = out if new_texts is not None else None
-        state.working, state.dirty, state.pending = None, False, []
+        state.working, state.dirty, state.pending, state.applied = None, False, [], []
 
     def _credit_commit(self, line: Line, commit: CommitMeta) -> None:
         edit_id = line.origin.edit_id

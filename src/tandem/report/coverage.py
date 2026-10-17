@@ -409,7 +409,7 @@ def render_text(cov: Coverage, *, head: str | None = None, filters: Filters | No
             if a["lines_dropped_before_commit"]:
                 lines.append(f"    dropped before any commit: {a['lines_dropped_before_commit']}")
             if a["lines_uncommitted"]:
-                lines.append(f"    not committed yet: {a['lines_uncommitted']}")
+                lines.append(f"    not in any analyzed commit: {a['lines_uncommitted']}")
             lines.append(f"    edits: {_fmt_counts(a['edits_by_outcome'])}")
         lines.append("")
 

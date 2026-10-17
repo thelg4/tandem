@@ -355,3 +355,12 @@ def test_agent_delete_is_removal_by_that_edit(tmp_path: Path) -> None:
     assert lines_by(r, a, "removed") == 2
     assert {x.removed_by for x in r.spans if x.origin.edit_id == a} == {d}
     assert r.edits[d].outcome is Outcome.COMMITTED
+
+
+def test_removal_only_edit_of_uncommitted_lines_is_committed(tmp_path: Path) -> None:
+    s = Scenario(tmp_path)
+    s.claude("a", "m.py", "x\ny\n")
+    trim = s.claude("a", "m.py", "x\n")
+    s.commit()
+    r = s.run()
+    assert r.edits[trim].outcome is Outcome.COMMITTED

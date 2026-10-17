@@ -1,0 +1,60 @@
+# Attribution rules (v0.1.0)
+
+Tandem attributes a line to an agent only when the agent's logged edit can be rebuilt exactly and the line it produced appears in a commit. Everything else stays unknown. This page describes the rules `tandem scan` applies; the version is recorded with every run.
+
+## What is tracked
+
+Every file an agent edited, from the start of the analyzed history to the target commit, as a list of **line instances**. An instance has an origin (an agent edit, an unexplained change, or the history baseline) and the first commit that contained it.
+
+- History is the target's first-parent chain, newest 2,000 commits by default (`max_history_commits`), or from `--since`.
+- Line identity is exact text after line-ending normalization. Indentation and whitespace changes count as changes.
+- A modified line is a removal plus a new instance. Unchanged lines keep their instance, even when an agent rewrites the whole file.
+- Exact (100%) renames carry lineage to the new path. Moves within a file and copies are not detected.
+- Binary files, files over the blob size limit, and excluded paths (lockfiles, vendored and generated code) are not line-tracked.
+
+## Applying an agent edit
+
+The edit is rebuilt against the file's tracked working state:
+
+| Evidence in the log | How it is applied |
+| --- | --- |
+| Claude Code original file + numbered patch | Before-state comes from the log itself |
+| Numbered unified diff (Codex FileChange) | Applied at its line numbers with every context line checked; if the numbers don't fit, located by content |
+| Codex patch text (no line numbers) | Located by content after its `@@` anchor |
+
+If the log's before-state differs from the tracked state, something unlogged changed the file in between (a shell command, a formatter, a hand edit). That difference is applied first as an **unknown** change, so it is never credited to an agent.
+
+## Commits
+
+Each commit's blob is compared with the working state. Matching lines keep their instance and are anchored to the commit. Lines only in the commit are new instances of unknown origin. Agent lines missing from the commit were **dropped before commit** and get no committed credit.
+
+Edits are matched to the first commit at or after their timestamp. Commit dates only order candidates: an edit counts as committed only if its lines actually appear in the commit.
+
+## Evidence classes
+
+| Class | When |
+| --- | --- |
+| verified | Exact, unique reconstruction, and the line appears in a commit |
+| supported | Reconstruction found more than one possible location, or the user changed the edit during approval |
+| ambiguous | The edit was based on a file state that another session had since replaced (concurrent edits) |
+| unknown | No supported log explains the line |
+| provisional | The line has not appeared in any analyzed commit |
+
+Default metrics count verified lines only.
+
+## Edit outcomes
+
+`committed` (some inserted line, or a pure deletion, landed), `overwritten_before_commit`, `uncommitted`, `no_effect` (the write changed nothing), `unplaced` (could not be rebuilt; reason recorded), `before_history`, `excluded`.
+
+## Coverage
+
+- **Line coverage:** verified agent lines introduced in range ÷ all lines inserted in range. Lines in files no agent touched come from `git log --numstat`, so they count toward the denominator as unknown.
+- **Edit coverage:** placed edits ÷ all successful edits observed in the repository.
+
+These two measures are reported separately and must not be conflated.
+
+## Known limits
+
+- Moves made outside a logged edit (for example `mv` in a shell) are not followed; edits to the old path stay provisional.
+- Identical lines at several positions are aligned by a deterministic diff (`difflib.SequenceMatcher`); a different alignment could assign some of them differently.
+- Merge commits are measured against their first parent; side-branch history is not walked.

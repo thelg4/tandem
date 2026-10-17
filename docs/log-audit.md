@@ -81,7 +81,7 @@ Usage sits on `assistant` records in `message.usage` (`input_tokens`, `cache_cre
 
 ## Decisions
 
-1. **Codex adapter targets the FileChange path first.** Patch-text-only sessions (0.94–0.98) are parsed as `supported`-class evidence until a baseline reconstructs them exactly.
+1. **Codex adapter targets the FileChange path first.** Patch-text-only sessions (0.94–0.98) have no line numbers; attribution locates each hunk by content and treats it as verified only when the location is unique (see [attribution.md](attribution.md)).
 2. **Claude Code adapter uses `toolUseResult`**, not tool inputs. Without `toolUseResult` an edit is `attempted`, never `succeeded`.
 3. **Usage:** dedupe Claude Code by `requestId`; use Codex per-call deltas.
 4. **Fixtures:** build synthetic fixtures that mirror these shapes (no real content), one family per era above.

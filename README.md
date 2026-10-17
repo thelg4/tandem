@@ -6,7 +6,7 @@ Tandem is a local-first analysis tool for developers who run Claude Code and Cod
 
 The repository is the unit of analysis, not the session. Every finding links back to the transcript events and Git revisions that support it.
 
-> **Status: pre-alpha.** `tandem scan` reads Claude Code and Codex logs, places each agent's edits in the repository, and stores them locally; `tandem report` shows that coverage, including files both agents edited. Matching edits to Git history (attribution), interaction detection, and durability metrics are not implemented yet, so the report shows observed edits, not surviving lines. `session` and `explain` are still stubs.
+> **Status: pre-alpha.** `tandem scan` reads Claude Code and Codex logs, matches each agent's edits to Git history, and attributes lines conservatively; `tandem report` shows coverage, attributed lines per agent, and which lines were later removed and by whom. Cross-agent interaction labels (rewrite, revert) and maturity-aware durability metrics are next. `session` and `explain` are still stubs.
 
 ## Why
 
@@ -58,7 +58,7 @@ ruff check .
 mypy
 ```
 
-Project layout follows the module boundaries in [docs/architecture.md](docs/architecture.md). Metric definitions are in [docs/metrics.md](docs/metrics.md).
+Project layout follows the module boundaries in [docs/architecture.md](docs/architecture.md). Attribution rules are in [docs/attribution.md](docs/attribution.md) and metric definitions in [docs/metrics.md](docs/metrics.md).
 
 ## License
 
