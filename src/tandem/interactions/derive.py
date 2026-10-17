@@ -77,6 +77,8 @@ class Interaction:
     original_commit: str | None
     removal_commit: str | None
     recent: bool
+    original_block: int | None = None
+    """Index into ``Result.blocks`` of the earlier change, when it is a single block."""
 
     @property
     def cross_agent(self) -> bool:
@@ -188,6 +190,7 @@ def derive(result: Result, edits: dict[str, AttrEdit], window: Window) -> list[I
                 original_commit=touches[0].introduced_commit,
                 removal_commit=next((t.removed_commit for t in touches if t.removed_commit), None),
                 recent=recent,
+                original_block=next(iter(born)) if earlier is not None else None,
             )
         )
     return sorted(out, key=review_order)

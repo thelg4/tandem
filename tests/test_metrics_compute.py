@@ -22,11 +22,11 @@ def worked_example() -> dict[str, object]:
     for g in range(10):
         edit = f"cc{g}"
         if g == 7:
-            lines.append(LineCohort("claude_code", "S", edit, V, 10, 0, 3, "codex"))
+            lines.append(LineCohort("claude_code", "S", edit, V, 10, 0, 3, "codex", V))
             groups.append(ChangeGroup("claude_code", "S", edit, V, 0, exact_revert_by_other=3))
             continue
         if g == 8:
-            lines.append(LineCohort("claude_code", "S", edit, V, 10, 0, 2, "codex"))
+            lines.append(LineCohort("claude_code", "S", edit, V, 10, 0, 2, "codex", V))
         elif g == 9:
             lines.append(LineCohort("claude_code", "S", edit, V, 10, 0, 4, None))
         else:
@@ -44,9 +44,9 @@ def worked_example() -> dict[str, object]:
             SessionUsage("codex", "X", 9_000, True),
         ],
         "received": [
-            Received("claude_code", 10),
-            Received("claude_code", 5),
-            Received("claude_code", 5),
+            Received("claude_code", 10, "S"),
+            Received("claude_code", 5, "S"),
+            Received("claude_code", 5, "S"),
         ],
     }
 
@@ -102,7 +102,7 @@ def test_tokens_with_no_surviving_lines_is_not_zero_or_infinite() -> None:
         "a",
         horizon=1,
         last_index=5,
-        lines=[LineCohort("a", "s", "e", V, 4, 0, 1, "b")],
+        lines=[LineCohort("a", "s", "e", V, 4, 0, 1, "b", V)],
         groups=[],
         usage=[SessionUsage("a", "s", 5_000, True)],
         received=[],

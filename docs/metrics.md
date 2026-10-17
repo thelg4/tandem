@@ -15,11 +15,11 @@ Only verified lines and edits count. Supported or ambiguous lines are reported a
 | Metric | Definition |
 | --- | --- |
 | Survival at N | Mature lines still present at their endpoint ÷ all mature lines. A line removed at or before `c0 + N`, by anyone, did not survive. A deleted line that comes back is a new instance. |
-| Churn received | Mature lines the other agent removed at or before their endpoint ÷ mature lines. Shown with the count of verified cross-agent interactions received and the lines they affected (all, not just mature ones). |
-| Exact revert rate | Mature change groups the other agent fully restored to their prior state at or before `anchor + N` ÷ mature change groups. Partial restorations are counted separately. |
+| Churn received | Mature lines the other agent's verified edits removed at or before their endpoint ÷ mature lines. Removals by the other agent's unverified edits are not counted and are disclosed in a note. Shown with the count of verified cross-agent interactions received and the lines they affected (all, not just mature ones); a session's scorecard counts only interactions on that session's lines. |
+| Exact revert rate | Mature change groups the other agent's verified edits fully restored at or before `anchor + N` ÷ mature change groups. A group is fully restored only when every part of the edit that inserted lines was exactly reverted; restoring some parts counts as a partial revert, reported separately. |
 | Tokens per surviving line | Processed tokens of eligible sessions ÷ their surviving mature lines. |
 
-A **change group** is one successful edit to one file, anchored to the first-parent commit where its result landed. Pure deletions are change groups too. Every committed edit has an observable preimage, because it was rebuilt from its log against a known file state.
+A **change group** is one successful edit to one file, anchored to the first-parent commit where its result landed. Every committed edit has an observable preimage, because it was rebuilt from its log against a known file state. Restoring deleted text is not detected yet, so pure deletions are left out of the exact revert rate (exclusion `deletion_restore_not_detected`), and an edit with a deletion-only part can be at most partially reverted.
 
 ## Tokens
 
@@ -28,7 +28,7 @@ Processed tokens never count cache tokens twice:
 - Claude Code reports input, cache-write, cache-read, and output tokens as separate categories; all four are summed.
 - Codex reports cached input inside input and reasoning inside output; only input and output are summed.
 
-A session is **eligible** when its usage is complete (every usage record has all of its agent's categories), it worked only in this repository, and all its verified lines have matured. Excluded sessions are listed with a reason (`usage_categories_missing`, `no_usage_recorded`, `session_also_worked_outside_repository`, `sessions_not_matured`). If eligible sessions spent tokens but none of their lines survived, the report shows the tokens without a ratio.
+A session is **eligible** when its usage is complete (every usage record has all of its agent's categories), it worked only in this repository, and all of its work is settled and measured: no edit still uncommitted, every line verified and line-tracked, and every line matured. A session that made no edits in this repository, such as a read-only helper, is excluded too: it has no lines to pair its tokens with. Excluded sessions are counted by reason (`usage_incomplete`, `sessions_not_matured`, `lines_not_verified`, `lines_became_untracked`, `session_made_no_edits`); the report lists each session's usage problem (`usage_categories_missing`, `no_usage_recorded`, `session_also_worked_outside_repository`). If eligible sessions spent tokens but none of their lines survived, the report shows the tokens without a ratio.
 
 Tokens are as reported by each agent, not a bill. Dollar estimates are not computed.
 
@@ -36,7 +36,7 @@ Tokens are as reported by each agent, not a bill. Dollar estimates are not compu
 
 - Survival describes persistence, not correctness. Rewrites may be improvements, and code that survives may still be wrong.
 - Line ratios penalize useful deletions, refactoring, tests, and exploration. Read them alongside the added and removed counts.
-- Scorecards with fewer than 30 mature lines or 3 contributing sessions are marked **small sample: not for comparison**. This is a presentation default, not a significance test.
+- Scorecards with fewer than 30 mature lines or 3 sessions with mature lines are marked **small sample: not for comparison**. This is a presentation default, not a significance test.
 - Changing the horizon needs a new scan (`tandem scan --horizon-commits N`). `tandem report --horizon-commits N` refuses to relabel numbers computed with a different horizon.
 
 ## Worked example (synthetic)

@@ -12,8 +12,8 @@ successes. Only verified lines and edits count by default.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import dataclass, field
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, replace
 
 from tandem.model.attribution import EvidenceClass
 from tandem.model.metrics import (
@@ -40,6 +40,8 @@ class LineCohort:
     """Commit index where they were removed; None if still present."""
     removed_by_agent: str | None = None
     """Agent whose edit removed them; None for an unattributed change."""
+    removed_by_evidence: EvidenceClass | None = None
+    """Evidence class of the removing edit; churn counts verified removals only."""
     unavailable_from: int | None = None
     """Commit index where the file stopped being line-tracked."""
 
@@ -56,6 +58,8 @@ class ChangeGroup:
     exact_revert_by_other: int | None = None
     """Commit index where another agent fully restored the prior state."""
     partial_revert_by_other: int | None = None
+    revert_observable: bool = True
+    """False when restoring the edit could not be detected (a pure deletion)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,10 +74,12 @@ class SessionUsage:
 
 @dataclass(frozen=True, slots=True)
 class Received:
-    """A verified cross-agent interaction received by ``agent``."""
+    """A verified cross-agent interaction received by ``agent`` in ``session``."""
 
     agent: str
     lines: int
+    session: str | None = None
+    """Session whose lines were changed; per-session cards count only their own."""
 
 
 @dataclass(slots=True)
@@ -119,8 +125,14 @@ def scorecard(
     usage: Iterable[SessionUsage],
     received: Iterable[Received],
     session: str | None = None,
+    token_ineligible: Mapping[str, str] | None = None,
 ) -> Scorecard:
-    """Durability scorecard for one agent (or one session of it, when ``session`` is set)."""
+    """Durability scorecard for one agent (or one session of it, when ``session`` is set).
+
+    ``token_ineligible`` maps sessions whose tokens cannot be paired with measured lines
+    to a reason: ``sessions_not_matured`` for sessions with unsettled (uncommitted)
+    edits, or another exclusion key (e.g. unverified or untracked lines).
+    """
 
     def mine(x: LineCohort | ChangeGroup | SessionUsage) -> bool:
         return x.agent == agent and (session is None or x.session == session)
@@ -130,7 +142,8 @@ def scorecard(
     lower = sum(c.count for c in own if c.evidence is not EvidenceClass.VERIFIED)
     card = Scorecard(scope=session or agent)
 
-    mature, pending, survived, churned, untracked = 0, 0, 0, 0, 0
+    mature, pending, survived, churned, untracked, unverified_churn = 0, 0, 0, 0, 0, 0
+    mature_sessions: set[str] = set()
     surviving_by_session: dict[str, int] = {}
     latest_c0: dict[str, int] = {}
     for c in verified:
@@ -143,22 +156,33 @@ def scorecard(
             untracked += c.count
             continue
         mature += c.count
+        mature_sessions.add(c.session)
         if c.removed is None or c.removed > endpoint:
             survived += c.count
             surviving_by_session[c.session] = surviving_by_session.get(c.session, 0) + c.count
         elif c.removed_by_agent is not None and c.removed_by_agent != agent:
-            churned += c.count
+            if c.removed_by_evidence is EvidenceClass.VERIFIED:
+                churned += c.count
+            else:
+                unverified_churn += c.count
 
     exclusions = {"pending": pending, "became_untracked": untracked, "not_verified": lower}
     card.mature_lines, card.pending_lines = mature, pending
     card.metrics[MetricName.SURVIVAL] = _rate(
         MetricName.SURVIVAL, survived, mature, pending, horizon, exclusions
     )
-    card.metrics[MetricName.CHURN_RECEIVED] = _rate(
-        MetricName.CHURN_RECEIVED, churned, mature, pending, horizon, exclusions
-    )
+    churn = _rate(MetricName.CHURN_RECEIVED, churned, mature, pending, horizon, exclusions)
+    if unverified_churn:
+        churn = replace(
+            churn,
+            notes=(
+                f"{unverified_churn} line(s) removed by the other agent's unverified edits "
+                "not counted",
+            ),
+        )
+    card.metrics[MetricName.CHURN_RECEIVED] = churn
 
-    got = [r for r in received if r.agent == agent]
+    got = [r for r in received if r.agent == agent and (session is None or r.session == session)]
     card.metrics[MetricName.CHURN_INTERACTIONS] = MetricValue.count(
         MetricName.CHURN_INTERACTIONS, len(got), horizon
     )
@@ -166,7 +190,9 @@ def scorecard(
         MetricName.CHURN_LINES, sum(r.lines for r in got), horizon
     )
 
-    own_groups = [g for g in groups if mine(g) and g.evidence is EvidenceClass.VERIFIED]
+    verified_groups = [g for g in groups if mine(g) and g.evidence is EvidenceClass.VERIFIED]
+    own_groups = [g for g in verified_groups if g.revert_observable]
+    undetectable = len(verified_groups) - len(own_groups)
     mature_groups = [g for g in own_groups if _mature(g.anchor, horizon, last_index)]
     reverted = sum(
         1
@@ -188,7 +214,10 @@ def scorecard(
         len(mature_groups),
         len(own_groups) - len(mature_groups),
         horizon,
-        {"pending_groups": len(own_groups) - len(mature_groups)},
+        {
+            "pending_groups": len(own_groups) - len(mature_groups),
+            "deletion_restore_not_detected": undetectable,
+        },
     )
     card.metrics[MetricName.PARTIAL_REVERTS] = MetricValue.count(
         MetricName.PARTIAL_REVERTS, partial, horizon
@@ -196,23 +225,28 @@ def scorecard(
 
     # Tokens per surviving line: only sessions with complete usage whose verified lines
     # have all matured, so tokens and the lines they produced are measured together.
-    tokens, lines_out, excluded_usage, excluded_young = 0, 0, 0, 0
-    sessions_seen = set()
+    ineligible = token_ineligible or {}
+    tokens, lines_out, eligible = 0, 0, 0
+    token_ex: dict[str, int] = {}
     for u in usage:
         if not mine(u):
             continue
-        sessions_seen.add(u.session)
         if u.session in latest_c0 and not _mature(latest_c0[u.session], horizon, last_index):
-            excluded_young += 1
+            why: str | None = "sessions_not_matured"
+        elif u.session in ineligible:
+            why = ineligible[u.session]
+        elif not u.complete or u.tokens is None:
+            why = "usage_incomplete"
+        else:
+            why = None
+        if why:
+            token_ex[why] = token_ex.get(why, 0) + 1
             continue
-        if not u.complete or u.tokens is None:
-            excluded_usage += 1
-            continue
-        tokens += u.tokens
+        eligible += 1
+        tokens += u.tokens or 0
         lines_out += surviving_by_session.get(u.session, 0)
-    eligible = len(sessions_seen) - excluded_usage - excluded_young
-    token_ex = {"usage_incomplete": excluded_usage, "sessions_not_matured": excluded_young}
-    token_ex = {k: v for k, v in token_ex.items() if v}
+    excluded_young = token_ex.get("sessions_not_matured", 0)
+    excluded_other = sum(v for k, v in token_ex.items() if k != "sessions_not_matured")
     if eligible == 0:
         status = MetricStatus.PENDING if excluded_young else MetricStatus.UNAVAILABLE
         tps = MetricValue(
@@ -224,7 +258,7 @@ def scorecard(
             tokens,
             lines_out,
             horizon,
-            partial=bool(excluded_usage),
+            partial=bool(excluded_other),
             exclusions=token_ex,
         )
         if lines_out == 0:
@@ -239,7 +273,7 @@ def scorecard(
             )
     card.metrics[MetricName.TOKENS_PER_SURVIVING_LINE] = tps
 
-    card.sessions = len({c.session for c in verified})
+    card.sessions = len(mature_sessions)
     card.comparable = (
         mature >= MIN_MATURE_LINES_FOR_COMPARISON and card.sessions >= MIN_SESSIONS_FOR_COMPARISON
     )
