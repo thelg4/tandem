@@ -1,13 +1,15 @@
 # Compatibility
 
-Adapter support is recorded per agent CLI version and fixture family. Undocumented log formats are not a stable contract, so only versions validated against pinned, sanitized fixtures are listed as supported.
+Adapter support is recorded per agent CLI version and fixture family. Undocumented log formats are not a stable contract, so only versions validated against pinned, sanitized fixtures are listed as supported. See [log-audit.md](log-audit.md) for what each version records.
 
 ## Agent log formats
 
-| Agent | CLI version | Adapter version | Supported edit tools | Status |
+| Agent | CLI versions audited | Edit evidence | Adapter | Status |
 | --- | --- | --- | --- | --- |
-| Claude Code | not yet audited | 0.0.0 | — | not implemented |
-| Codex | not yet audited | 0.0.0 | — | not implemented |
+| Claude Code | 2.1.285, 2.1.302 (cloud session) | `toolUseResult.originalFile` + `structuredPatch` | 0.0.0 | audited; adapter not implemented; desktop CLI not yet audited |
+| Codex | 0.144.0-alpha.4, 0.153.x | `FileChange` unified diffs | 0.0.0 | audited; adapter not implemented |
+| Codex | 0.94.0-alpha.10, 0.98.0 | `apply_patch` text only (no line numbers) | 0.0.0 | audited; supported-class evidence at best |
+| Codex | 0.146–0.148 | sessions present, no edits in sample | — | needs edit samples |
 
 ## Platform
 
