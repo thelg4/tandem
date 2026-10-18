@@ -1,6 +1,6 @@
-"""Interactions: derive rewrite, removal, exact-revert and overlap records (spec §7).
+"""Interactions: derive rewrite, removal, exact-revert and overlap records.
 
-No intent or correctness inference (INT-01).
+No intent or correctness inference.
 """
 
 from tandem.interactions.derive import Interaction, Window, derive, review_order

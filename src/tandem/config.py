@@ -1,4 +1,4 @@
-"""Declarative policy configuration (spec §13, "Configuration rules").
+"""Declarative policy configuration.
 
 Precedence: explicit CLI option > user-approved repo config > global user config
 > defaults. Configuration is TOML and cannot execute code. Repo configuration may
@@ -43,7 +43,7 @@ DEFAULT_EXCLUDE_GLOBS: tuple[str, ...] = (
     "**/*.generated.*",
 )
 
-# Keys a repository-local config is never allowed to set (spec §13).
+# Keys a repository-local config is never allowed to set.
 REPO_FORBIDDEN_KEYS = frozenset(
     {"claude_root", "codex_root", "include_worktrees", "allow_execution"}
 )
@@ -66,7 +66,7 @@ class Policy:
     claude_root: Path | None = None
     codex_root: Path | None = None
     allow_execution: bool = False
-    """Always False in P0. Only an explicit CLI choice may change it in P2."""
+    """Always False for now; only an explicit CLI choice will be able to change it."""
     sources: tuple[str, ...] = field(default=("defaults",))
 
     def validate(self) -> Policy:

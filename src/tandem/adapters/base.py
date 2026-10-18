@@ -1,13 +1,13 @@
-"""Adapter contract (spec §3, §4).
+"""Adapter contract.
 
 An adapter turns one provider's raw records into normalized ``Event`` objects.
 Provider-specific parsing stays here; downstream stages see only the envelope.
 Adapters must:
 
-- pair tool calls with results by provider ID and source order (ING-05);
+- pair tool calls with results by provider ID and source order;
 - never mark an edit succeeded without a successful result;
 - keep unknown fields as diagnostics instead of failing the scan;
-- report the provider versions and fixture families they support (SCOPE-01).
+- report the provider versions and fixture families they support.
 """
 
 from __future__ import annotations

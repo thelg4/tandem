@@ -6,7 +6,7 @@ Adapter support is recorded per agent CLI version and fixture family. Undocument
 
 | Agent | CLI versions audited | Edit evidence | Adapter | Status |
 | --- | --- | --- | --- | --- |
-| Claude Code | 2.1.285, 2.1.302 (cloud session) | `toolUseResult.originalFile` + `structuredPatch` | 0.1.0 | adapter implemented; validated on 1 transcript; desktop CLI not yet audited |
+| Claude Code | 2.1.x (cloud and desktop) | `toolUseResult.originalFile` + `structuredPatch` | 0.1.0 | adapter implemented; edits validated on a cloud transcript; 144 desktop transcripts on macOS read with no malformed records |
 | Codex | 0.144.0-alpha.4, 0.153.x | `FileChange` unified diffs | 0.1.0 | adapter implemented; validated on real logs |
 | Codex | 0.94.0-alpha.10, 0.98.0 | `apply_patch` text only (no line numbers) | 0.1.0 | adapter implemented; verified only when each hunk locates uniquely by content |
 | Codex | 0.146–0.148 | sessions present, no edits in sample | — | needs edit samples |

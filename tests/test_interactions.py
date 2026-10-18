@@ -1,4 +1,4 @@
-"""Interaction labels for the spec's cross-agent scenarios (§7, §16)."""
+"""Interaction labels for cross-agent scenarios on real Git repositories."""
 
 from __future__ import annotations
 

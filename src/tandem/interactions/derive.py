@@ -1,8 +1,8 @@
-"""Derive cross-agent interactions from attribution touches (spec §7).
+"""Derive cross-agent interactions from attribution touches.
 
 A touch says that a later agent edit removed a line an earlier edit inserted, and that
 the removal stuck. Touches are grouped by (earlier edit, later edit, later edit's
-block), and each group gets exactly one primary label (INT-02):
+block), and each group gets exactly one primary label:
 
 - ``exact_revert``: the later block removed exactly what the earlier block inserted
   and put back exactly what it replaced.
@@ -13,7 +13,7 @@ block), and each group gets exactly one primary label (INT-02):
 - ``overlap_candidate``: either edit's evidence is ambiguous, so order or lineage is
   uncertain. Excluded from verified totals.
 
-Labels are neutral (INT-01). A rewrite is not a fix or a regression; commit messages
+Labels are neutral. A rewrite is not a fix or a regression; commit messages
 and prompts cannot establish correctness.
 
 Edits from one session touching its own lines are not interactions. The same agent in
@@ -40,7 +40,7 @@ class Window:
     mode: WindowMode = WindowMode.EITHER
 
     def contains(self, elapsed: float | None, distance: int | None) -> bool:
-        """Unknown time or distance never satisfies a predicate (spec §7)."""
+        """Unknown time or distance never satisfies a predicate."""
         in_hours = elapsed is not None and elapsed <= self.hours * 3600
         in_commits = distance is not None and distance <= self.commits
         if self.mode is WindowMode.HOURS:
@@ -206,7 +206,7 @@ _LABEL_ORDER = {
 
 
 def review_order(i: Interaction) -> tuple[int, int, int, float, str]:
-    """Inspection order (UX-03): cross-agent first, exact restorations, affected lines,
+    """Inspection order: cross-agent first, exact restorations, affected lines,
     then most recent. This is a review order, not a severity ranking."""
     return (
         0 if i.cross_agent else 1,

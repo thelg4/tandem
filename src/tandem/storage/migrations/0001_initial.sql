@@ -1,7 +1,7 @@
--- Tandem schema v1 (spec §12).
--- Git object IDs are opaque TEXT without an assumed hash length (DB-02).
--- Timestamps are UTC TEXT with original precision, plus source ordering (DB-02).
--- NULL means unknown and is never rendered as zero (DB-04).
+-- Tandem schema v1.
+-- Git object IDs are opaque TEXT without an assumed hash length.
+-- Timestamps are UTC TEXT with original precision, plus source ordering.
+-- NULL means unknown and is never rendered as zero.
 
 CREATE TABLE repositories (
     repo_id          TEXT PRIMARY KEY,           -- local UUID; no remote URL required
@@ -22,7 +22,7 @@ CREATE TABLE sources (
     source_id        TEXT PRIMARY KEY,
     provider         TEXT NOT NULL,              -- claude_code | codex
     path             TEXT NOT NULL,
-    generation       INTEGER NOT NULL DEFAULT 0, -- bumped when the source is rewritten (ING-07)
+    generation       INTEGER NOT NULL DEFAULT 0, -- bumped when the source is rewritten
     prefix_digest    TEXT,
     processed_offset INTEGER NOT NULL DEFAULT 0,
     snapshot_limit   INTEGER,
@@ -43,7 +43,7 @@ CREATE TABLE sessions (
     UNIQUE (agent_family, provider_session_id)
 );
 
--- One session may touch several repositories (ING-03).
+-- One session may touch several repositories.
 CREATE TABLE session_segments (
     segment_id       INTEGER PRIMARY KEY,
     session_id       TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
@@ -92,7 +92,7 @@ CREATE TABLE usage_records (
     basis            TEXT NOT NULL CHECK (basis IN ('per_call', 'cumulative', 'unknown')),
     category         TEXT NOT NULL,              -- raw provider meaning preserved
     raw_value        INTEGER NOT NULL,
-    incremental      INTEGER,                    -- NULL when the increment cannot be verified (MET-01)
+    incremental      INTEGER,                    -- NULL when the increment cannot be verified
     segment          INTEGER NOT NULL DEFAULT 0  -- counter resets start a new segment
 );
 CREATE INDEX usage_event ON usage_records(event_id);
@@ -143,7 +143,7 @@ CREATE TABLE edit_spans (
     reason_codes         TEXT
 );
 
--- Line-instance intervals, not one row per Python object per line (DB-01).
+-- Line-instance intervals, not one row per Python object per line.
 CREATE TABLE lineage (
     lineage_id           INTEGER PRIMARY KEY,
     run_id               INTEGER NOT NULL REFERENCES analysis_runs(run_id) ON DELETE CASCADE,
@@ -204,10 +204,10 @@ CREATE TABLE analysis_runs (
     target_commit_id     TEXT,
     baseline_commit_id   TEXT,
     policy_hash          TEXT NOT NULL,
-    manifest             TEXT NOT NULL           -- JSON: inputs, fingerprints, versions (DB-03)
+    manifest             TEXT NOT NULL           -- JSON: inputs, fingerprints, versions
 );
 
--- Only a completed run may become the latest pointer (DB-04).
+-- Only a completed run may become the latest pointer.
 CREATE TABLE latest_run (
     repo_id              TEXT PRIMARY KEY REFERENCES repositories(repo_id),
     run_id               INTEGER NOT NULL REFERENCES analysis_runs(run_id)
@@ -238,7 +238,7 @@ CREATE TABLE diagnostics (
     excerpt              TEXT                    -- bounded, escaped
 );
 
--- User notes live apart from machine-derived results (spec §12).
+-- User notes live apart from machine-derived results.
 CREATE TABLE annotations (
     annotation_id        INTEGER PRIMARY KEY,
     target_kind          TEXT NOT NULL,

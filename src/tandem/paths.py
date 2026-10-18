@@ -1,4 +1,4 @@
-"""Platform storage locations (spec §13, "Configuration rules").
+"""Platform storage locations.
 
 Tandem-owned data lives outside the analyzed repository, with one database per
 repository identity. Nothing here touches the network or the repository.
@@ -42,14 +42,14 @@ def database_path(repo_identity: str) -> Path:
 
 
 def default_claude_root() -> Path:
-    """Commonly ~/.claude/projects (ING-01). Explicit roots always win."""
+    """Commonly ~/.claude/projects. Explicit roots always win."""
     config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
     base = Path(config_dir).expanduser() if config_dir else Path.home() / ".claude"
     return base / "projects"
 
 
 def default_codex_root() -> Path:
-    """Commonly ~/.codex/sessions (ING-01). Explicit roots always win."""
+    """Commonly ~/.codex/sessions. Explicit roots always win."""
     codex_home = os.environ.get("CODEX_HOME")
     base = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
     return base / "sessions"

@@ -1,4 +1,4 @@
-"""Normalized, versioned event envelope (spec §4).
+"""Normalized, versioned event envelope.
 
 Every adapter emits these records. Provider-specific parsing stays inside the
 adapter; attribution consumes only normalized records. Missing data is ``None``
@@ -18,7 +18,7 @@ class AgentFamily(StrEnum):
     CLAUDE_CODE = "claude_code"
     CODEX = "codex"
     HUMAN = "human"
-    """Only with explicit evidence or a stored user annotation (spec §4)."""
+    """Only with explicit evidence or a stored user annotation."""
     UNKNOWN = "unknown"
 
 
@@ -36,7 +36,7 @@ class EventType(StrEnum):
 
 
 class ActionStatus(StrEnum):
-    """A call without a successful result is never a completed edit (ING-05)."""
+    """A call without a successful result is never a completed edit."""
 
     ATTEMPTED = "attempted"
     SUCCEEDED = "succeeded"
@@ -90,7 +90,7 @@ class Actor:
     session_id: str
     parent_session_id: str | None = None
     model_id: str | None = None
-    """Nullable and may vary by turn (ING-04)."""
+    """Nullable and may vary by turn."""
 
 
 @dataclass(frozen=True, slots=True)

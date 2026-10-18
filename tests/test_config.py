@@ -10,7 +10,7 @@ from tandem.model.attribution import EvidenceClass
 from tandem.model.interactions import WindowMode
 
 
-def test_defaults_match_spec() -> None:
+def test_defaults() -> None:
     policy = load_policy()
     assert policy.horizon_commits == 5
     assert policy.window_hours == 24

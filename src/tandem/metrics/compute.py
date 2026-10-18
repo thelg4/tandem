@@ -1,7 +1,7 @@
-"""Maturity-aware durability metrics (spec §8, §9).
+"""Maturity-aware durability metrics.
 
 Pure functions over plain records, so the definitions can be checked against the
-spec's worked example without Git. Every value keeps its numerator, denominator,
+worked example in docs/metrics.md without Git. Every value keeps its numerator, denominator,
 horizon, and exclusions; there is no composite score.
 
 Cohorts and maturity: a line instance's cohort commit ``c0`` is the first-parent
