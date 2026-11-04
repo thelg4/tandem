@@ -28,3 +28,5 @@ tests/fixtures/raw/
 
 # Brainstorm companion scratch
 .superpowers/
+app/node_modules/
+app/out/

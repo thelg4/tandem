@@ -1,0 +1,63 @@
+// Mirrors src/tandem/live/protocol.py and the spec's protocol tables.
+
+export type Agent = 'claude_code' | 'codex'
+
+export interface TreeFile {
+  path: string
+  size: number
+}
+
+export type WatcherMsg =
+  | { v: 1; type: 'hello'; version: string; repo_root: string; claude_root: string; codex_root: string }
+  | { v: 1; type: 'tree'; files: TreeFile[]; truncated: boolean }
+  | {
+      v: 1
+      type: 'session'
+      session_id: string
+      agent: Agent
+      pane_id: string | null
+      external: boolean
+      ended: boolean
+      cwd: string | null
+      model: string | null
+      title: string | null
+    }
+  | { v: 1; type: 'status'; session_id: string; state: 'working' | 'idle'; pending_call: boolean; at: string }
+  | {
+      v: 1
+      type: 'activity'
+      session_id: string
+      kind: 'read' | 'edit' | 'shell' | 'prompt'
+      phase: 'start' | 'done' | 'failed'
+      paths: string[]
+      tool: string
+      at: string
+      id: string
+    }
+  | { v: 1; type: 'overlap'; path: string; level: 'active' | 'recent' | 'cleared'; sessions: string[]; at: string }
+  | { v: 1; type: 'change'; path: string; likely_session: string | null; at: string }
+  | { v: 1; type: 'diagnostic'; level: 'info' | 'warn'; code: string; message: string }
+
+export type PaneCommand =
+  | {
+      type: 'pane_started'
+      pane_id: string
+      agent: Agent
+      pid: number
+      claude_session_id?: string
+      spawned_at: string
+    }
+  | { type: 'pane_exited'; pane_id: string; at: string }
+  | { type: 'pane_input'; pane_id: string; at: string }
+
+export const AGENT_COLORS: Record<Agent, string> = {
+  claude_code: '#e0825f',
+  codex: '#3fbf96',
+}
+
+export const AGENT_NAMES: Record<Agent, string> = {
+  claude_code: 'Claude',
+  codex: 'Codex',
+}
+
+export type MenuEvent = { kind: 'new-pane'; agent: Agent } | { kind: 'close-pane' }
