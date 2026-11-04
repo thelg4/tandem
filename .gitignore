@@ -25,3 +25,6 @@ tests/fixtures/raw/
 # Private planning documents
 *.docx
 .DS_Store
+
+# Brainstorm companion scratch
+.superpowers/
