@@ -220,3 +220,22 @@ def test_shell_tools() -> None:
         (act,) = _acts(codex.feed(_codex("response_item", payload)))
         assert (act.kind, act.tool) == ("shell", name)
     assert codex.pending == 2
+
+
+def test_shell_results_emit_done() -> None:
+    claude = ClaudeExtractor()
+    claude.feed(_claude_use("Bash", "t1", command="ls"))
+    (done,) = _acts(claude.feed(_claude_result("t1")))
+    assert (done.kind, done.phase, done.call_id) == ("shell", "done", "t1")
+
+    codex = CodexExtractor()
+    codex.feed(_meta("/r"))
+    codex.feed(
+        _codex(
+            "response_item",
+            {"type": "custom_tool_call", "call_id": "x1", "name": "exec", "input": "{}"},
+        )
+    )
+    out = {"type": "custom_tool_call_output", "call_id": "x1", "output": ""}
+    (done,) = _acts(codex.feed(_codex("response_item", out)))
+    assert (done.kind, done.phase) == ("shell", "done")

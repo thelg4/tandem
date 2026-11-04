@@ -154,10 +154,11 @@ class ClaudeExtractor:
 
     def _result(self, block: dict[str, Any], at: float | None) -> list[Signal]:
         call = self._calls.pop(_str(block.get("tool_use_id")) or "", None)
-        if call is None or call.kind != "edit":
+        if call is None or call.kind not in ("edit", "shell"):
             return []
         phase: Phase = "failed" if block.get("is_error") is True else "done"
-        return [Activity("edit", phase, call.paths, call.tool, at, str(block.get("tool_use_id")))]
+        call_id = str(block.get("tool_use_id"))
+        return [Activity(call.kind, phase, call.paths, call.tool, at, call_id)]
 
 
 class CodexExtractor:
@@ -197,8 +198,8 @@ class CodexExtractor:
         call_id = _str(p.get("call_id")) or _str(p.get("id")) or ""
         if ptype in ("function_call_output", "custom_tool_call_output"):
             call = self._calls.pop(call_id, None)
-            if call is not None and call.kind == "edit":
-                return [Activity("edit", "done", call.paths, call.tool, at, call_id)]
+            if call is not None and call.kind in ("edit", "shell"):
+                return [Activity(call.kind, "done", call.paths, call.tool, at, call_id)]
             return []
         if ptype not in ("function_call", "custom_tool_call", "local_shell_call"):
             return []
