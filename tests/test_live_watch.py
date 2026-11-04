@@ -219,3 +219,22 @@ def test_watch_exits_on_stdin_eof(git_repo: tuple[Path, GitRunner], tmp_path: Pa
 
 def test_cli_watch_help() -> None:
     assert main(["watch", "--help"]) == 0
+
+
+def test_coalesce_keeps_last_status_and_session_per_id() -> None:
+    from tandem.live.watch import coalesce
+
+    msgs: list[dict[str, object]] = [
+        {"type": "status", "session_id": "A", "state": "working"},
+        {"type": "activity", "session_id": "A", "id": "1"},
+        {"type": "session", "session_id": "A", "title": None},
+        {"type": "status", "session_id": "B", "state": "idle"},
+        {"type": "status", "session_id": "A", "state": "idle"},
+        {"type": "session", "session_id": "A", "title": "T"},
+    ]
+    assert coalesce(msgs) == [
+        {"type": "activity", "session_id": "A", "id": "1"},
+        {"type": "status", "session_id": "B", "state": "idle"},
+        {"type": "status", "session_id": "A", "state": "idle"},
+        {"type": "session", "session_id": "A", "title": "T"},
+    ]

@@ -239,11 +239,13 @@ class Watcher:
             records, rewritten = tracked.tail.read()
             if rewritten:
                 tracked.extractor = type(tracked.extractor)()
+            batch: list[Msg] = []
             for rec in records:
                 for sig in tracked.extractor.feed(rec):
                     if isinstance(sig, Meta) and sig.root_session is not None:
                         sig = Meta(cwd=sig.cwd, model=sig.model)
-                    self.emit(self.state.apply(tracked.sid, sig))
+                    batch.extend(self.state.apply(tracked.sid, sig))
+            self.emit(coalesce(batch))
             pending[tracked.sid] = pending.get(tracked.sid, 0) + tracked.extractor.pending
         for sid, count in pending.items():
             self.emit(self.state.sync_pending(sid, count))
@@ -271,6 +273,22 @@ class Watcher:
                     }
                 ]
             )
+
+
+def coalesce(msgs: list[Msg]) -> list[Msg]:
+    """Keep only the last ``status`` and ``session`` message per session in one batch.
+
+    Replaying a long log at startup otherwise sends every historical turn transition.
+    """
+    last: dict[tuple[object, object], int] = {}
+    for i, msg in enumerate(msgs):
+        if msg["type"] in ("status", "session"):
+            last[(msg["type"], msg.get("session_id"))] = i
+    return [
+        m
+        for i, m in enumerate(msgs)
+        if m["type"] not in ("status", "session") or last[(m["type"], m.get("session_id"))] == i
+    ]
 
 
 def _reader(inp: TextIO, q: queue.Queue[object]) -> None:
