@@ -2,8 +2,8 @@
 
 Paths arrive absolute from the extractors and leave relative to the worktree top level;
 anything outside it is dropped. Activity older than the overlap window (record time)
-updates status and pending calls but produces no map or overlap messages, so replaying
-logs at startup never raises fresh alarms.
+never counts toward an overlap, so replaying logs at startup raises no fresh alarms;
+of that old activity only edits are sent on, for the map's residual tint.
 """
 
 from __future__ import annotations
@@ -109,7 +109,10 @@ class LiveState:
                 s.shells.add(act.call_id)
             else:
                 s.shells.discard(act.call_id)
-        if at < now - RECENT_S:
+        old = at < now - RECENT_S
+        # Past the overlap window only edits still matter: they keep a residual tint
+        # on the map while their session lives. They never count toward an overlap.
+        if old and (act.kind != "edit" or act.phase == "failed"):
             return []
         paths = [rel for p in act.paths if (rel := self._relative(p)) is not None]
         if act.paths and not paths:
@@ -126,7 +129,7 @@ class LiveState:
                 "id": act.call_id,
             }
         ]
-        if act.kind == "edit" and act.phase != "failed":
+        if act.kind == "edit" and act.phase != "failed" and not old:
             for path in paths:
                 out.extend(self.overlaps.edit(path, sid, at))
         return out
