@@ -43,3 +43,33 @@ export function agentCommand(agent: Agent, claudeSessionId?: string): string {
   }
   return shellQuote(resolveCodex())
 }
+
+// Variables a running agent sets for its own children. A pane launched from inside a
+// Claude Code or Codex session must not inherit them: Claude treats an inherited
+// CLAUDE_CODE_CHILD_SESSION as a subprocess and stops saving its transcript, which
+// would leave the watcher blind. User configuration (CLAUDE_CODE_USE_BEDROCK,
+// CODEX_HOME, ...) is kept.
+const SESSION_VARS = new Set([
+  'CLAUDECODE',
+  'CLAUDE_PID',
+  'CLAUDE_EFFORT',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_SESSION_ATTENDED',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CODEX_THREAD_ID',
+  'CODEX_SANDBOX',
+  'CODEX_SANDBOX_NETWORK_DISABLED',
+  'CODEX_CI',
+])
+
+export function paneEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && !SESSION_VARS.has(key)) out[key] = value
+  }
+  return { ...out, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
+}

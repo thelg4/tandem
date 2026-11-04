@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import * as pty from 'node-pty'
 import type { Agent, PaneCommand } from '../shared/protocol'
-import { agentCommand, loginShell } from './agents'
+import { agentCommand, loginShell, paneEnv } from './agents'
 
 interface Pane {
   agent: Agent
@@ -63,10 +63,7 @@ export class PaneManager {
 
   private spawn(paneId: string, agent: Agent): void {
     const claudeSessionId = agent === 'claude_code' ? randomUUID() : undefined
-    const env = { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<
-      string,
-      string
-    >
+    const env = paneEnv(process.env)
     const proc = pty.spawn(loginShell(), ['-l', '-c', `exec ${agentCommand(agent, claudeSessionId)}`], {
       name: 'xterm-256color',
       cols: 100,
