@@ -7,9 +7,11 @@ import type { PaneHeader } from './components/TerminalPane'
 import { Toolbar } from './components/Toolbar'
 import { RepoMap } from './map/RepoMap'
 import { forgetPane, getAct } from './state/paneActivity'
-import { installPaneDataListener } from './state/paneData'
-import { hasLiveDecay, paneSession, paneStatus } from './state/selectors'
+import { forgetPaneData, installPaneDataListener } from './state/paneData'
+import { hasLiveDecay, paneSession, paneStatus, reuseUnchanged } from './state/selectors'
 import { initialState, reduce } from './state/store'
+
+const MAP_IDLE_TICK_MS = 30_000
 
 /** Re-render on a clock: 4 fps while something fades or a pane is live, else 1 fps. */
 function useNow(fast: boolean): number {
@@ -36,6 +38,7 @@ export function App(): JSX.Element {
   const closePane = useCallback((paneId: string) => {
     window.tandem.kill(paneId)
     forgetPane(paneId)
+    forgetPaneData(paneId)
     dispatch({ type: 'pane_removed', paneId })
   }, [])
 
@@ -62,7 +65,13 @@ export function App(): JSX.Element {
   }, [addPane, closePane])
 
   const live = state.panes.some((p) => !p.exited)
-  const now = useNow(live || hasLiveDecay(state, Date.now()))
+  const decaying = hasLiveDecay(state, Date.now())
+  const now = useNow(live || decaying)
+  // While nothing on the map fades, its cells are settled and only its "n min ago"
+  // labels move, so it gets a 30 s clock and its memo skips the other ticks. Rounding
+  // up keeps every cell at or past its settled state.
+  const mapNow = decaying ? now : Math.ceil(now / MAP_IDLE_TICK_MS) * MAP_IDLE_TICK_MS
+  const prevHeaders = useRef<Record<string, PaneHeader>>({})
 
   const headers = useMemo(() => {
     const out: Record<string, PaneHeader> = {}
@@ -81,8 +90,15 @@ export function App(): JSX.Element {
           : null,
       }
     }
-    return out
+    prevHeaders.current = reuseUnchanged(prevHeaders.current, out)
+    return prevHeaders.current
   }, [state, now])
+
+  const onAdd = useCallback((agent: Agent) => void addPane(agent), [addPane])
+  const onToggleCalm = useCallback(() => dispatch({ type: 'toggle_calm' }), [])
+  const onFocus = useCallback((id: string) => {
+    focused.current = id
+  }, [])
 
   const startSplit = (e: ReactPointerEvent<HTMLDivElement>): void => {
     e.preventDefault()
@@ -101,8 +117,8 @@ export function App(): JSX.Element {
         repoRoot={state.repoRoot}
         calm={state.calm}
         diagnostics={state.diagnostics}
-        onAdd={(agent) => void addPane(agent)}
-        onToggleCalm={() => dispatch({ type: 'toggle_calm' })}
+        onAdd={onAdd}
+        onToggleCalm={onToggleCalm}
       />
       <main className="workspace">
         <section className="left" style={{ flexBasis: `${split * 100}%` }}>
@@ -123,7 +139,7 @@ export function App(): JSX.Element {
             <PaneStack
               panes={state.panes}
               headers={headers}
-              onFocus={(id) => (focused.current = id)}
+              onFocus={onFocus}
               onClose={closePane}
               onRestart={restartPane}
             />
@@ -133,7 +149,7 @@ export function App(): JSX.Element {
         <section className="right">
           <Banner state={state} />
           <ExternalList state={state} />
-          <RepoMap state={state} now={now} />
+          <RepoMap state={state} now={mapNow} />
         </section>
       </main>
     </div>

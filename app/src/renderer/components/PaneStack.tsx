@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { Fragment, memo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Pane } from '../state/store'
 import { TerminalPane, type PaneHeader } from './TerminalPane'
 
@@ -12,7 +12,7 @@ interface Props {
 
 const MIN_PX = 120
 
-export function PaneStack({ panes, headers, onFocus, onClose, onRestart }: Props): JSX.Element {
+export const PaneStack = memo(function PaneStack({ panes, headers, onFocus, onClose, onRestart }: Props): JSX.Element {
   const [weights, setWeights] = useState<Record<string, number>>({})
   const box = useRef<HTMLDivElement>(null)
 
@@ -61,4 +61,4 @@ export function PaneStack({ panes, headers, onFocus, onClose, onRestart }: Props
       ))}
     </div>
   )
-}
+})

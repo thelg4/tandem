@@ -1,7 +1,8 @@
+import { memo } from 'react'
 import { AGENT_COLORS, AGENT_NAMES } from '../../shared/protocol'
 import type { AppState } from '../state/store'
 
-export function ExternalList({ state }: { state: AppState }): JSX.Element | null {
+export const ExternalList = memo(function ExternalList({ state }: { state: AppState }): JSX.Element | null {
   const external = Object.values(state.sessions).filter((s) => s.external && !s.ended)
   if (external.length === 0) return null
   return (
@@ -19,4 +20,4 @@ export function ExternalList({ state }: { state: AppState }): JSX.Element | null
       })}
     </div>
   )
-}
+})

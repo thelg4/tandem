@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { AGENT_COLORS, type Agent } from '../../shared/protocol'
 import type { Diag } from '../state/store'
 
@@ -9,7 +10,7 @@ interface Props {
   onToggleCalm: () => void
 }
 
-export function Toolbar({ repoRoot, calm, diagnostics, onAdd, onToggleCalm }: Props): JSX.Element {
+export const Toolbar = memo(function Toolbar({ repoRoot, calm, diagnostics, onAdd, onToggleCalm }: Props): JSX.Element {
   const warnings = diagnostics.filter((d) => d.level === 'warn')
   return (
     <header className="toolbar">
@@ -34,4 +35,4 @@ export function Toolbar({ repoRoot, calm, diagnostics, onAdd, onToggleCalm }: Pr
       </button>
     </header>
   )
-}
+})
