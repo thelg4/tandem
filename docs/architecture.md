@@ -20,6 +20,7 @@ Git objects ───────┘                              ▲
 | interactions | `src/tandem/interactions/` | Rewrite, removal, exact-revert, overlap records | Infer intent or correctness |
 | metrics | `src/tandem/metrics/` | Mature cohorts and pooled, versioned scorecards | Drop denominators or exclusions |
 | storage | `src/tandem/storage/` | Migrations, transactional imports, run manifests, indexed reads | Overwrite the latest complete run with a failed one |
+| live | `src/tandem/live/` | Follow logs as they are written, live activity, file-level overlaps, `tandem watch` NDJSON stream | Feed attribution or metrics; send prompt, diff, or command text |
 | cli | `src/tandem/cli.py` | Present findings, filters, evidence, diagnostics | Run commands found in transcripts |
 
 Shared contracts live in `src/tandem/model/`: the event envelope, evidence classes, interaction labels, and the metric value type.
@@ -43,3 +44,7 @@ One database per repository, outside the repository:
 - Linux: `$XDG_DATA_HOME/tandem/repos/<id>.sqlite3` (default `~/.local/share`)
 
 Override with `TANDEM_DATA_DIR` or `--db`.
+
+## Live workspace
+
+`tandem watch` streams NDJSON to the desktop app in `app/` (Electron, node-pty, xterm.js). The protocol and the overlap rules are in `docs/superpowers/specs/2026-11-04-live-workspace-design.md`. The live extractors are separate from the scan adapters: they read call-time intent from records as they arrive, and nothing they produce is stored.
