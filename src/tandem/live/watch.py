@@ -31,6 +31,7 @@ TICK_S = 1.0
 RECENT_LOG_S = 600.0
 UNATTRIBUTED_GRACE_S = 5.0
 BIND_SLACK_S = 2.0
+INPUT_BIND_S = 10.0
 _EOF = object()
 
 
@@ -174,6 +175,8 @@ class Watcher:
         tail = Tail(path, AgentFamily.CLAUDE_CODE)
         if self._pane_for(sid) is None and not self.state.has(sid):
             cwd, _ = peek_cwd(path, AgentFamily.CLAUDE_CODE)
+            if cwd is None:
+                return  # first records carry no cwd yet; look again on the next pass
             if not self.in_scope(cwd):
                 self.files[path] = _Tracked(tail, None)
                 return
@@ -223,11 +226,19 @@ class Watcher:
             for p in self.panes.values()
             if p.agent == "codex" and created >= p.spawned_at - BIND_SLACK_S
         ]
-        unbound = sorted((p for p in candidates if p.session is None), key=lambda p: p.spawned_at)
+        # A pane typed into just before the rollout appeared is the one that started it.
+        typed = sorted(
+            (p for p in candidates if p.last_input and abs(created - p.last_input) <= INPUT_BIND_S),
+            key=lambda p: p.last_input,
+            reverse=True,
+        )
+        unbound = [p for p in candidates if p.session is None]
+        typed_unbound = [p for p in typed if p.session is None]
+        if typed_unbound:
+            return typed_unbound[0]
         if unbound:
-            return unbound[0]
-        typed = sorted(candidates, key=lambda p: p.last_input, reverse=True)
-        return typed[0] if typed and typed[0].last_input > 0 else None
+            return min(unbound, key=lambda p: p.spawned_at)
+        return typed[0] if typed else None
 
     # -- polling ------------------------------------------------------------------
 
@@ -236,7 +247,12 @@ class Watcher:
         for tracked in self.files.values():
             if tracked.sid is None or tracked.extractor is None:
                 continue
-            records, rewritten = tracked.tail.read()
+            try:
+                records, rewritten = tracked.tail.read()
+            except OSError as exc:
+                self.diagnostic("warn", "log_read_failed", f"stopped following a log: {exc}")
+                tracked.sid = None
+                continue
             if rewritten:
                 tracked.extractor = type(tracked.extractor)()
             batch: list[Msg] = []

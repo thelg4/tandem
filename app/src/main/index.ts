@@ -96,7 +96,12 @@ function createWindow(): void {
 }
 
 function wire(repo: string): void {
-  watcher = new WatcherBridge(repo, app.getAppPath(), (msg) => win?.webContents.send('watcher:msg', msg))
+  watcher = new WatcherBridge(
+    repo,
+    app.getAppPath(),
+    (msg) => win?.webContents.send('watcher:msg', msg),
+    () => panes?.livePanes() ?? [],
+  )
   panes = new PaneManager(repo, {
     data: (paneId, data) => win?.webContents.send('pane:data', paneId, data),
     exit: (paneId, code) => win?.webContents.send('pane:exit', paneId, code),
@@ -107,7 +112,12 @@ function wire(repo: string): void {
     if (!started) {
       started = true
       watcher?.start()
+      return
     }
+    // The renderer reloaded and lost its panes: end their ptys and start a fresh
+    // watcher so the new renderer receives hello, tree and sessions again.
+    panes?.killAll()
+    watcher?.reset()
   })
   ipcMain.handle('repo', () => ({ root: repo }))
   ipcMain.handle('pane:create', (_e, agent: Agent) => ({ paneId: panes!.create(agent) }))

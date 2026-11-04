@@ -238,3 +238,141 @@ def test_coalesce_keeps_last_status_and_session_per_id() -> None:
         {"type": "status", "session_id": "A", "state": "idle"},
         {"type": "session", "session_id": "A", "title": "T"},
     ]
+
+
+# -- final review fixes --------------------------------------------------------------
+
+
+def _watcher(repo: Path, tmp_path: Path, clock: Any = time.time) -> Any:
+    from tandem.git_reader import GitReader
+    from tandem.live.watch import Watcher
+
+    git = GitReader(repo)
+    return Watcher(
+        git.discover().top_level,
+        io.StringIO(),
+        tmp_path / "claude" / "projects",
+        tmp_path / "codex" / "sessions",
+        tmp_path / "claude",
+        clock,
+        git,
+    )
+
+
+def _out(w: Any) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in w.out.getvalue().splitlines()]
+
+
+def test_claude_log_without_cwd_yet_is_retried(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path
+) -> None:
+    repo = _repo(git_repo)
+    log = tmp_path / "claude" / "projects" / "-x" / f"{UUID}.jsonl"
+    log.parent.mkdir(parents=True)
+    log.write_text(json.dumps({"type": "last-prompt", "sessionId": UUID}) + "\n")
+    w = _watcher(repo, tmp_path)
+    w.discover()
+    _claude_edit_log(log, repo)
+    w.discover()
+    w.poll_tails()
+    assert any(m["type"] == "activity" for m in _out(w))
+
+
+def _codex_rollout(path: Path, repo: Path, sid: str, created: float) -> None:
+    meta = {
+        "id": sid,
+        "session_id": sid,
+        "cwd": str(repo),
+        "originator": "codex_cli_rs",
+        "timestamp": iso(created),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"timestamp": iso(created), "type": "session_meta", "payload": meta}) + "\n"
+    )
+
+
+def _start(w: Any, pane: str, spawned: float) -> None:
+    w.handle(
+        {
+            "type": "pane_started",
+            "pane_id": pane,
+            "agent": "codex",
+            "pid": 1,
+            "spawned_at": iso(spawned),
+        }
+    )
+
+
+def test_bound_codex_pane_keeps_session_when_input_is_stale(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path
+) -> None:
+    repo = _repo(git_repo)
+    now = time.time()
+    clock = {"t": now - 100}
+    w = _watcher(repo, tmp_path, lambda: clock["t"])
+    _start(w, "p1", now - 100)
+    _codex_rollout(tmp_path / "codex" / "sessions" / "a.jsonl", repo, "A", now - 99)
+    w.discover()
+    w.handle({"type": "pane_input", "pane_id": "p1", "at": iso(now - 98)})
+    clock["t"] = now
+    _codex_rollout(tmp_path / "codex" / "sessions" / "b.jsonl", repo, "B", now)
+    w.discover()
+    sessions = {m["session_id"]: m for m in _out(w) if m["type"] == "session"}
+    assert sessions["codex:A"]["pane_id"] == "p1" and sessions["codex:A"]["ended"] is False
+    assert sessions["codex:B"]["external"] is True
+
+
+def test_bound_codex_pane_follows_new_session_right_after_typing(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path
+) -> None:
+    repo = _repo(git_repo)
+    now = time.time()
+    clock = {"t": now - 100}
+    w = _watcher(repo, tmp_path, lambda: clock["t"])
+    _start(w, "p1", now - 100)
+    _codex_rollout(tmp_path / "codex" / "sessions" / "a.jsonl", repo, "A", now - 99)
+    w.discover()
+    clock["t"] = now - 2
+    w.handle({"type": "pane_input", "pane_id": "p1", "at": iso(now - 2)})
+    clock["t"] = now
+    _codex_rollout(tmp_path / "codex" / "sessions" / "b.jsonl", repo, "B", now)
+    w.discover()
+    sessions = {m["session_id"]: m for m in _out(w) if m["type"] == "session"}
+    assert sessions["codex:B"]["pane_id"] == "p1"
+
+
+def test_codex_binds_to_the_pane_typed_into(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path
+) -> None:
+    repo = _repo(git_repo)
+    now = time.time()
+    clock = {"t": now - 10}
+    w = _watcher(repo, tmp_path, lambda: clock["t"])
+    _start(w, "pA", now - 10)
+    _start(w, "pB", now - 9)
+    clock["t"] = now - 1
+    w.handle({"type": "pane_input", "pane_id": "pB", "at": iso(now - 1)})
+    clock["t"] = now
+    _codex_rollout(tmp_path / "codex" / "sessions" / "b.jsonl", repo, "B", now)
+    w.discover()
+    sessions = {m["session_id"]: m for m in _out(w) if m["type"] == "session"}
+    assert sessions["codex:B"]["pane_id"] == "pB"
+
+
+def test_unreadable_log_does_not_kill_the_watcher(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path, monkeypatch: Any
+) -> None:
+    from tandem.live.tail import Tail
+
+    repo = _repo(git_repo)
+    _claude_edit_log(tmp_path / "claude" / "projects" / "-x" / f"{UUID}.jsonl", repo)
+    w = _watcher(repo, tmp_path)
+    w.discover()
+
+    def boom(self: Tail) -> tuple[list[dict[str, Any]], bool]:
+        raise PermissionError("gone")
+
+    monkeypatch.setattr(Tail, "read", boom)
+    w.poll_tails()
+    assert any(m["type"] == "diagnostic" and m["code"] == "log_read_failed" for m in _out(w))

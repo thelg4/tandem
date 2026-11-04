@@ -7,6 +7,7 @@ interface Pane {
   agent: Agent
   proc: pty.IPty
   lastInputSent: number
+  started: PaneCommand
 }
 
 export interface PaneSink {
@@ -57,6 +58,11 @@ export class PaneManager {
     pane?.proc.kill('SIGHUP')
   }
 
+  /** ``pane_started`` for every running pane, for a watcher that restarted. */
+  livePanes(): PaneCommand[] {
+    return [...this.panes.values()].map((p) => p.started)
+  }
+
   killAll(): void {
     for (const id of [...this.panes.keys()]) this.kill(id)
   }
@@ -71,7 +77,15 @@ export class PaneManager {
       cwd: this.repo,
       env,
     })
-    this.panes.set(paneId, { agent, proc, lastInputSent: 0 })
+    const started: PaneCommand = {
+      type: 'pane_started',
+      pane_id: paneId,
+      agent,
+      pid: proc.pid,
+      ...(claudeSessionId ? { claude_session_id: claudeSessionId } : {}),
+      spawned_at: new Date().toISOString(),
+    }
+    this.panes.set(paneId, { agent, proc, lastInputSent: 0, started })
     proc.onData((data) => this.sink.data(paneId, data))
     proc.onExit(({ exitCode }) => {
       // A restart replaces the pty; only report the exit of the current one.
@@ -80,13 +94,6 @@ export class PaneManager {
       }
       this.sink.command({ type: 'pane_exited', pane_id: paneId, at: new Date().toISOString() })
     })
-    this.sink.command({
-      type: 'pane_started',
-      pane_id: paneId,
-      agent,
-      pid: proc.pid,
-      ...(claudeSessionId ? { claude_session_id: claudeSessionId } : {}),
-      spawned_at: new Date().toISOString(),
-    })
+    this.sink.command(started)
   }
 }
