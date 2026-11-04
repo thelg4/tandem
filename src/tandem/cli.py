@@ -316,6 +316,24 @@ def _add_policy(p: argparse.ArgumentParser) -> None:
     )
 
 
+def cmd_watch(args: argparse.Namespace) -> int:
+    from tandem.live.watch import run_watch
+
+    git = _git_for(args.path)
+    claude, codex = resolve_roots(
+        Path(args.claude_root).expanduser() if args.claude_root else None,
+        Path(args.codex_root).expanduser() if args.codex_root else None,
+    )
+    return run_watch(
+        git.discover().top_level,
+        sys.stdout,
+        sys.stdin,
+        claude_root=claude.path,
+        codex_root=codex.path,
+        claude_config=claude.path.parent,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tandem",
@@ -382,6 +400,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--keep", metavar="DIR", help="build the demo in DIR and keep it")
     p.set_defaults(func=cmd_demo)
+
+    p = sub.add_parser(
+        "watch", help="stream live agent activity as NDJSON (used by the desktop app)"
+    )
+    p.add_argument("path", nargs="?", default=".")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_watch)
 
     return parser
 
