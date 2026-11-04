@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from tandem.live.extract import Activity, Meta, Turn
+from tandem.live.protocol import iso
 from tandem.live.state import LiveState
 
 T0 = 1_800_000_000.0
@@ -82,13 +83,26 @@ def test_subagent_never_overlaps_parent(tmp_path: Path) -> None:
     assert _of(st.apply("A", _edit(top, "x.py", T0)), "overlap") == []
 
 
-def test_replay_old_activity_is_silent(tmp_path: Path) -> None:
+def test_replay_old_activity_never_overlaps(tmp_path: Path) -> None:
     st, clock, top = _state(tmp_path)
     old = T0 - 20 * 60
-    assert _of(st.apply("A", _edit(top, "x.py", old)), "activity") == []
+    assert _of(st.apply("A", _edit(top, "x.py", old)), "overlap") == []
     assert _of(st.apply("B", _edit(top, "x.py", old)), "overlap") == []
+    assert not st.edited_recently("x.py", within=5)
     (status,) = st.sync_pending("A", 1)
     assert status["pending_call"] is True and status["state"] == "idle"
+
+
+def test_replay_old_edits_still_reach_the_map(tmp_path: Path) -> None:
+    """Hours-old edits by a live session keep their residual tint on the map."""
+    st, clock, top = _state(tmp_path)
+    old = T0 - 3 * 3600
+    (act,) = _of(st.apply("A", _edit(top, "x.py", old, phase="done")), "activity")
+    assert (act["kind"], act["paths"], act["at"]) == ("edit", ["x.py"], iso(old))
+    failed = _edit(top, "y.py", old, phase="failed")
+    assert _of(st.apply("A", failed), "activity") == []
+    read = Activity("read", "start", (str(top / "x.py"),), "Read", old, "r")
+    assert _of(st.apply("A", read), "activity") == []
 
 
 def test_status_changes_only_on_transition(tmp_path: Path) -> None:
