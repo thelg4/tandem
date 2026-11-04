@@ -8,7 +8,6 @@ logs at startup never raises fresh alarms.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +15,7 @@ from pathlib import Path
 from tandem.live.extract import Activity, Meta, Signal, Turn
 from tandem.live.overlap import RECENT_S, OverlapTracker
 from tandem.live.protocol import iso
+from tandem.live.scope import Scope
 
 Msg = dict[str, object]
 
@@ -37,7 +37,7 @@ class _Session:
 class LiveState:
     def __init__(self, top: Path, clock: Callable[[], float]) -> None:
         self.top = top
-        self._top = str(top)
+        self.scope = Scope(top)
         self._clock = clock
         self._sessions: dict[str, _Session] = {}
         self.overlaps = OverlapTracker(clock)
@@ -132,10 +132,7 @@ class LiveState:
         return out
 
     def _relative(self, path: str) -> str | None:
-        norm = os.path.normpath(path)
-        if not norm.startswith(self._top + os.sep):
-            return None
-        return os.path.relpath(norm, self._top)
+        return self.scope.relative(path)
 
     def _meta(self, sid: str, s: _Session, meta: Meta) -> list[Msg]:
         before = (s.cwd, s.model, s.title)

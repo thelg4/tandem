@@ -133,3 +133,16 @@ def test_shell_open_and_edited_recently(tmp_path: Path) -> None:
     assert st.edited_recently("y.py", within=5)
     assert not st.edited_recently("y.py", within=2)
     assert not st.edited_recently("z.py", within=5)
+
+
+def test_paths_through_a_symlinked_alias_of_the_repo(tmp_path: Path) -> None:
+    st, _, top = _state(tmp_path)
+    alias = tmp_path / "alias"
+    alias.symlink_to(top, target_is_directory=True)
+    (top / "pkg").mkdir()
+    msgs = st.apply("A", Activity("read", "start", (str(alias / "pkg" / "m.py"),), "Read", T0, "r"))
+    assert _of(msgs, "activity")[0]["paths"] == ["pkg/m.py"]
+    # A symlink inside the repo that points out of it is still outside.
+    (top / "out").symlink_to(tmp_path, target_is_directory=True)
+    msgs = st.apply("A", Activity("read", "start", (str(top / "out" / "x"),), "Read", T0, "r2"))
+    assert _of(msgs, "activity") == []

@@ -7,7 +7,6 @@ goes to stdout, one message per line (see ``protocol``). Read-only throughout.
 
 from __future__ import annotations
 
-import os
 import queue
 import threading
 import time
@@ -148,9 +147,7 @@ class Watcher:
     def in_scope(self, cwd: str | None) -> bool:
         if not cwd:
             return False
-        norm = os.path.normpath(cwd)
-        top = str(self.top)
-        return norm == top or norm.startswith(top + os.sep)
+        return self.state.scope.contains(cwd)
 
     def discover(self) -> None:
         registry = claude_registry(self.claude_config)
@@ -170,7 +167,8 @@ class Watcher:
         return next((p for p in self.panes.values() if p.session == sid), None)
 
     def _track_claude(self, path: Path) -> None:
-        raw = path.parent.parent.name if path.parent.name == "subagents" else path.stem
+        sidechain = path.parent.name == "subagents"
+        raw = path.parent.parent.name if sidechain else path.stem
         sid = f"claude_code:{raw}"
         tail = Tail(path, AgentFamily.CLAUDE_CODE)
         if self._pane_for(sid) is None and not self.state.has(sid):
@@ -181,7 +179,7 @@ class Watcher:
                 self.files[path] = _Tracked(tail, None)
                 return
             self.emit(self.state.ensure_session(sid, "claude_code", pane_id=None, external=True))
-        self.files[path] = _Tracked(tail, sid, ClaudeExtractor())
+        self.files[path] = _Tracked(tail, sid, ClaudeExtractor(sidechain=sidechain))
 
     def _track_codex(self, path: Path) -> None:
         tail = Tail(path, AgentFamily.CODEX)
@@ -192,7 +190,7 @@ class Watcher:
                 self.files[path] = _Tracked(tail, None)
             return
         root = meta.get("session_id") or meta.get("id")
-        sid = f"codex:{root}"
+        sid = f"codex:{root if isinstance(root, str) and root else path.stem}"
         if sid not in self.codex_seen:
             created = parse_iso(meta.get("timestamp")) or self.clock()
             originator = meta.get("originator")
@@ -254,7 +252,7 @@ class Watcher:
                 tracked.sid = None
                 continue
             if rewritten:
-                tracked.extractor = type(tracked.extractor)()
+                tracked.extractor = tracked.extractor.fresh()
             batch: list[Msg] = []
             for rec in records:
                 for sig in tracked.extractor.feed(rec):

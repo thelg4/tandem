@@ -376,3 +376,57 @@ def test_unreadable_log_does_not_kill_the_watcher(
     monkeypatch.setattr(Tail, "read", boom)
     w.poll_tails()
     assert any(m["type"] == "diagnostic" and m["code"] == "log_read_failed" for m in _out(w))
+
+
+def test_codex_rollout_without_an_id_is_named_by_its_file(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path
+) -> None:
+    repo = _repo(git_repo)
+    log = tmp_path / "codex" / "sessions" / "2026" / "rollout-2026-11-04-abc.jsonl"
+    _codex_patch_log(log, repo)
+    lines = [json.loads(x) for x in log.read_text().splitlines()]
+    del lines[0]["payload"]["id"], lines[0]["payload"]["session_id"]
+    log.write_text("".join(json.dumps(x) + "\n" for x in lines))
+    msgs = _run(repo, tmp_path, [])
+    sids = {m["session_id"] for m in msgs if m["type"] == "session"}
+    assert sids == {"codex:rollout-2026-11-04-abc"}
+
+
+def test_subagent_end_turn_leaves_the_parent_working(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path
+) -> None:
+    repo = _repo(git_repo)
+    now = iso(time.time())
+    base = tmp_path / "claude" / "projects" / "-x"
+    base.mkdir(parents=True)
+    prompt = {"type": "user", "cwd": str(repo), "timestamp": now, "message": {"content": "go"}}
+    (base / f"{UUID}.jsonl").write_text(json.dumps(prompt) + "\n")
+    done = {
+        "type": "assistant",
+        "isSidechain": True,
+        "cwd": str(repo),
+        "timestamp": now,
+        "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "ok"}]},
+    }
+    sub = base / UUID / "subagents" / "agent-1.jsonl"
+    sub.parent.mkdir(parents=True)
+    task = {**prompt, "isSidechain": True, "message": {"content": "sub task"}}
+    sub.write_text(json.dumps(task) + "\n" + json.dumps(done) + "\n")
+    msgs = _run(repo, tmp_path, [])
+    # The subagent's task prompt is not a prompt typed into the session.
+    prompts = [m for m in msgs if m["type"] == "activity" and m["kind"] == "prompt"]
+    assert len(prompts) == 1
+    statuses = [m for m in msgs if m["type"] == "status"]
+    assert statuses and statuses[-1]["state"] == "working"
+
+
+def test_session_recorded_through_a_symlinked_alias_is_in_scope(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path
+) -> None:
+    repo = _repo(git_repo)
+    alias = tmp_path / "alias"
+    alias.symlink_to(repo, target_is_directory=True)
+    _claude_edit_log(tmp_path / "claude" / "projects" / "-x" / f"{UUID}.jsonl", alias)
+    msgs = _run(repo, tmp_path, [])
+    edits = [m for m in msgs if m["type"] == "activity" and m["kind"] == "edit"]
+    assert [e["paths"] for e in edits] == [["a.py"], ["a.py"]]
