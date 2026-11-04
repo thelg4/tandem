@@ -14,7 +14,7 @@
 
 - The watcher makes no network requests, never writes to logs, the repo or agent config, and adds no Python dependencies.
 - Git runs only through `GitReader.run` (hardened env, `GIT_OPTIONAL_LOCKS=0`).
-- No prompt text, diffs or command text cross the protocol. Strip control characters from every string (NFR-03).
+- No prompt text, diffs or command text cross the protocol. Strip control characters from every string.
 - Protocol: one JSON object per line, `"v": 1`, UTC ISO timestamps with milliseconds and a `Z` suffix.
 - Windows: overlap `active` ≤ 2 min, `recent` ≤ 15 min, measured on record time. Read glow 20 s, edit glow 90 s. Waiting heuristic 1.5 s of pty silence with a pending call.
 - Polling: tail every 250 ms, discovery and git every 2 s, recency window for discovery 10 min, tree cap 20 000.

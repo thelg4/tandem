@@ -1,4 +1,4 @@
-"""Versioned machine-readable report (spec §13, UX-06).
+"""Versioned machine-readable report.
 
 Emitted to stdout by ``tandem report --format json``; diagnostics go to stderr.
 Exports exclude prompts, absolute home paths, secrets and full diffs by default,

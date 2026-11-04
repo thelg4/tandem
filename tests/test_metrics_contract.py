@@ -1,4 +1,4 @@
-"""Metric value contract, checked against the spec §9 synthetic worked example."""
+"""Metric value contract, checked against the synthetic worked example in docs/metrics.md."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
--- Cross-agent interactions per analysis run (spec §7, §12).
+-- Cross-agent interactions per analysis run.
 -- The v1 table was keyed by interaction_id alone and never written; interactions recur
 -- across runs, so it is replaced by a table keyed by (run_id, interaction_id).
 

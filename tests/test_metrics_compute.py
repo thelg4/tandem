@@ -1,4 +1,4 @@
-"""Durability metrics, starting with the spec's synthetic worked example (§9)."""
+"""Durability metrics, starting with the synthetic worked example in docs/metrics.md."""
 
 from __future__ import annotations
 

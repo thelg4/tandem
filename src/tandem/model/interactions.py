@@ -1,7 +1,7 @@
-"""Cross-agent interaction labels (spec §7).
+"""Cross-agent interaction labels.
 
-Labels are neutral (INT-01): a rewrite is not a fix, regression, or mistake.
-Exactly one primary label per event feeds headline counts (INT-02); supporting
+Labels are neutral: a rewrite is not a fix, regression, or mistake.
+Exactly one primary label per event feeds headline counts; supporting
 tags may overlap and are never summed into the headline.
 """
 
@@ -30,7 +30,7 @@ class InteractionTag(StrEnum):
 
 
 class WindowMode(StrEnum):
-    """How the recent-interaction highlight window combines its predicates (spec §7)."""
+    """How the recent-interaction highlight window combines its predicates."""
 
     EITHER = "either"
     BOTH = "both"

@@ -1,4 +1,4 @@
-"""Per-session usage for durability metrics (spec §9 MET-01, MET-02).
+"""Per-session usage for durability metrics.
 
 Processed tokens are normalized so cache tokens are never counted twice:
 

@@ -1,4 +1,4 @@
-"""Line-lineage attribution over first-parent history (spec §5, §6).
+"""Line-lineage attribution over first-parent history.
 
 Each tracked file is a list of line instances. An instance keeps its origin (an agent
 edit, an unexplained change, or the history baseline) and the commit where it first
@@ -17,9 +17,9 @@ landed. Two kinds of step move the lists forward:
 Edits are assigned to the first commit at or after their timestamp. Commit dates are
 treated as metadata: an edit only counts if its lines actually appear in the commit.
 
-Line identity is exact text after line-ending normalization (ALG-06). Unchanged lines
-keep their instance across rewrites (ATT-03); a modified line is a removal plus an
-introduction (ALG-05). Alignment uses Python's difflib, a deterministic algorithm that
+Line identity is exact text after line-ending normalization. Unchanged lines
+keep their instance across rewrites; a modified line is a removal plus an
+introduction. Alignment uses Python's difflib, a deterministic algorithm that
 is recorded as the diff policy.
 """
 

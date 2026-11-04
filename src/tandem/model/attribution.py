@@ -1,4 +1,4 @@
-"""Attribution evidence classes (spec §5).
+"""Attribution evidence classes.
 
 Attribution is an evidence classification, not a probabilistic score. Every
 assignment carries the class plus the reason codes that explain why it was

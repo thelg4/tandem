@@ -1,4 +1,4 @@
-"""SQLite connection, migrations, and the single-writer lock (spec §11, §12, DB-05, NFR-05)."""
+"""SQLite connection, migrations, and the single-writer lock."""
 
 from __future__ import annotations
 

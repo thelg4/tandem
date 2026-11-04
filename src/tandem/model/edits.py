@@ -1,4 +1,4 @@
-"""Observed edits: what an agent's log says it changed in one file (spec §4 Content, §6 ALG-03).
+"""Observed edits: what an agent's log says it changed in one file.
 
 An ``ObservedEdit`` is evidence, not attribution. Attribution later decides whether
 the edit can be placed against a Git snapshot and what evidence class it earns.

@@ -1,4 +1,4 @@
-"""Bounded, read-only Git access (spec §6 ALG-02, NFR-02, NFR-03).
+"""Bounded, read-only Git access.
 
 Rules enforced here:
 - Argument arrays only; revisions and paths are validated before use.
@@ -19,7 +19,7 @@ from pathlib import Path
 from tandem.errors import GitError, InvalidInputError
 
 MIN_GIT_VERSION = (2, 31, 0)
-"""Needs `rev-parse --path-format=absolute`. Validate on CI before release (SCOPE-03)."""
+"""Needs `rev-parse --path-format=absolute`. Validate on CI before release."""
 
 _SAFE_REV = re.compile(r"^[A-Za-z0-9_./@{}^~:+-]+$")
 
@@ -163,7 +163,7 @@ class GitReader:
         return rev
 
     def resolve_commit(self, rev: str = "HEAD") -> str:
-        """Resolve to an immutable object ID (ALG-01). IDs are opaque strings (DB-02)."""
+        """Resolve to an immutable object ID. IDs are opaque strings."""
         self.validate_revision(rev)
         res = self.run(
             "rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{commit}}", check=False
@@ -174,7 +174,7 @@ class GitReader:
         return oid
 
     def first_parent_chain(self, rev: str, *, max_count: int | None = None) -> list[str]:
-        """Commits on the first-parent chain, oldest first (ALG-01)."""
+        """Commits on the first-parent chain, oldest first."""
         oid = self.resolve_commit(rev)
         args = ["rev-list", "--first-parent", "--reverse"]
         if max_count is not None:
@@ -201,7 +201,7 @@ class GitReader:
             if line.startswith("worktree ")
         ]
 
-    # -- history (B06) --------------------------------------------------------------------
+    # -- history -------------------------------------------------------------------------
 
     def history(self, target: str, *, max_count: int) -> list[CommitMeta]:
         """First-parent commits ending at ``target``, oldest first, newest ``max_count`` kept."""
@@ -338,7 +338,7 @@ class GitReader:
 
 
 RENAME_POLICY = "100%"
-"""Exact-content renames only (ALG-07). Recorded in run manifests."""
+"""Exact-content renames only. Recorded in run manifests."""
 
 _OID = re.compile(r"^[0-9a-f]{4,128}$")
 
@@ -354,7 +354,7 @@ class CommitMeta:
     parents: tuple[str, ...]
     tree: str
     commit_time: int
-    """Committer time (epoch seconds). Metadata, not a causal clock (ALG-02)."""
+    """Committer time (epoch seconds). Metadata, not a causal clock."""
 
 
 @dataclass(frozen=True, slots=True)

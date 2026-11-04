@@ -1,4 +1,4 @@
-"""Incremental, bounded JSONL reading (spec §3 ING-06, ING-07, "Stable scan boundary").
+"""Incremental, bounded JSONL reading.
 
 - Reads only up to a byte limit captured when the scan began.
 - Resumes after the last complete record; an unfinished trailing record is
@@ -28,9 +28,9 @@ class SourceState(StrEnum):
     UNCHANGED = "unchanged"
     APPENDED = "appended"
     REWRITTEN = "rewritten"
-    """Truncated, replaced, or prefix changed: rebuild this source generation (ING-07)."""
+    """Truncated, replaced, or prefix changed: rebuild this source generation."""
     MISSING = "missing"
-    """Marked unavailable; previous evidence is kept, not erased (ING-07)."""
+    """Marked unavailable; previous evidence is kept, not erased."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +95,7 @@ def classify(path: Path, previous: Checkpoint | None, snapshot_limit: int) -> So
 
 def _excerpt(raw: bytes) -> str:
     text = raw[:EXCERPT_BYTES].decode("utf-8", "replace")
-    # Escape control characters so diagnostics cannot drive the terminal (NFR-03).
+    # Escape control characters so diagnostics cannot drive the terminal.
     return "".join(ch if ch.isprintable() else f"\\x{ord(ch):02x}" for ch in text)
 
 

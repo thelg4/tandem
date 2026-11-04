@@ -1,4 +1,4 @@
-"""Turn one attribution run into durability scorecards and store them (spec §8)."""
+"""Turn one attribution run into durability scorecards and store them."""
 
 from __future__ import annotations
 

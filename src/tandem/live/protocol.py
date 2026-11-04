@@ -1,7 +1,7 @@
 """NDJSON protocol between ``tandem watch`` and the desktop app.
 
 One JSON object per line, ``"v": 1``. Strings are stripped of control characters so a
-transcript cannot drive the app's terminal or UI (NFR-03). No prompt text, diffs, or
+transcript cannot drive the app's terminal or UI. No prompt text, diffs, or
 command text are ever sent.
 """
 

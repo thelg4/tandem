@@ -1,4 +1,4 @@
-"""Attribution scenarios from the spec's verification table (§16), on real Git repositories."""
+"""Attribution scenarios on real Git repositories, each with known ground truth."""
 
 from __future__ import annotations
 

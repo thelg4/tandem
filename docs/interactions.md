@@ -46,5 +46,5 @@ Interactions are listed for inspection in this order: cross-agent first, then ex
 
 ## Not yet covered
 
-- `conflict_observed` (a merge or patch conflict recorded in a log or the repository) is defined in the spec but not detected yet.
-- Test-associated repair labels need imported test results (P1).
+- `conflict_observed` (a merge or patch conflict recorded in a log or the repository) is planned but not detected yet.
+- Test-associated repair labels need imported test results (planned).

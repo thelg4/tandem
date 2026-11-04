@@ -74,7 +74,7 @@ New package `src/tandem/live/`. It stays stdlib-only like the rest of the core, 
 
 - **Tailing.** Poll candidate log files every 250 ms by size and mtime. Read new complete records with the existing `sources.jsonl.read_incremental` and its checkpoints, so an unfinished trailing line waits for the next poll. On a `REWRITTEN` state, re-read from 0 and rebuild that session's live state.
 - **Which files to tail.**
-  - *Claude panes*: the app launches `claude --session-id <uuid>`, so the transcript is the `<uuid>.jsonl` found under the Claude root. Search by file name only. Folder names are never trusted (ING-02). Subagent transcripts live in `<uuid>/subagents/*.jsonl` next to it (records have `isSidechain: true`). They are tailed too, and their activity counts as the pane's session.
+  - *Claude panes*: the app launches `claude --session-id <uuid>`, so the transcript is the `<uuid>.jsonl` found under the Claude root. Search by file name only. Folder names are never trusted. Subagent transcripts live in `<uuid>/subagents/*.jsonl` next to it (records have `isSidechain: true`). They are tailed too, and their activity counts as the pane's session.
   - *Codex panes*: the app can't choose the session id. The watcher watches for a new rollout file created after the pane was spawned whose `session_meta.cwd` is inside the repo, and binds it to the oldest unbound Codex pane. Records with `source.subagent` are child threads of the bound session, not new panes.
   - *External sessions*: any Claude or Codex log modified in the last 10 minutes whose recorded cwd is inside the repo is also tailed, for example Codex Desktop or a `claude` started in iTerm. These appear on the map and in a compact "outside the app" list, with no pane.
   - Discovery rescans the roots every 2 s, looking only at files with mtime in the last 10 minutes.
@@ -116,7 +116,7 @@ App → watcher (stdin):
 | `pane_input` | `pane_id`, `at` (sent at most once per second per pane) |
 | `pane_exited` | `pane_id`, `at` |
 
-Content never crosses the protocol: no prompt text at all (the title is the agent's own generated title), no diffs, and no command text. (`tool` is the tool name, for example `Edit`.) Control characters are stripped from every string field (NFR-03).
+Content never crosses the protocol: no prompt text at all (the title is the agent's own generated title), no diffs, and no command text. (`tool` is the tool name, for example `Edit`.) Control characters are stripped from every string field.
 
 ### Electron app (`app/`)
 

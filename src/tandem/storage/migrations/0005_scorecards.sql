@@ -1,4 +1,4 @@
--- Durability scorecard context per run and scope (spec §8). Metric values live in metrics.
+-- Durability scorecard context per run and scope. Metric values live in metrics.
 
 CREATE TABLE scorecards (
     run_id           INTEGER NOT NULL REFERENCES analysis_runs(run_id) ON DELETE CASCADE,

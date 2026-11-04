@@ -2,14 +2,14 @@
 
 Edit evidence comes from ``toolUseResult`` on the user record that answers a tool call:
 the original file text plus a numbered ``structuredPatch``. Tool inputs alone never
-produce a succeeded edit (ING-05).
+produce a succeeded edit.
 
 Usage sits on assistant records and is repeated on every record of one API response,
 so it is counted once per ``requestId``.
 
 The adapter parses one complete source generation. Calls whose results arrive in a
 later append are paired when the generation is re-parsed (incremental pairing state
-is a storage concern, B05).
+is a storage concern).
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
-"""Source discovery (spec §3 ING-01, ING-02).
+"""Source discovery.
 
 Discovery only lists candidate files. Matching a source to a repository uses
 recorded working directories and file paths inside the records, resolved
-against the Git root. Encoded folder names are never trusted (ING-02).
+against the Git root. Encoded folder names are never trusted.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def resolve_roots(
 
 
 def iter_source_files(root: SourceRoot) -> Iterator[SourceFile]:
-    """Yield JSONL files under an approved root without following symlinks out of it (NFR-04)."""
+    """Yield JSONL files under an approved root without following symlinks out of it."""
     if not root.available:
         return
     base = root.path.resolve()

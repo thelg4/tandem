@@ -1,4 +1,4 @@
-"""Scan: bounded, incremental import of agent logs into the repository database (spec §3, §11).
+"""Scan: bounded, incremental import of agent logs into the repository database.
 
 One scan:
 
@@ -7,10 +7,10 @@ One scan:
 2. Skips unchanged sources. A grown source is re-parsed from the start of its current
    generation so calls and results pair across the append; stable event IDs make the
    re-insert idempotent. A rewritten source starts a new generation; old rows are kept,
-   not erased (ING-07).
+   not erased.
 3. Resolves events against the repository and stores only sessions that touched it.
 4. Imports each source in its own transaction, then marks the run complete. A failed
-   run never replaces the latest complete run (DB-04).
+   run never replaces the latest complete run.
 
 Full prompts, responses, and terminal output are not stored. Edits store digests,
 hunk ranges, and change metadata; the source locator links back to the original record.
@@ -265,7 +265,8 @@ class Scanner:
         provider = source.agent.value
         sid = source_id_for(provider, source.path)
         row = conn.execute(
-            "SELECT generation, processed_offset, prefix_digest, status FROM sources "
+            "SELECT generation, processed_offset, prefix_digest, status, first_record_at "
+            "FROM sources "
             "WHERE source_id=?",
             (sid,),
         ).fetchone()
@@ -287,7 +288,9 @@ class Scanner:
             "state": state.value,
         }
         summary.sources[state.value] += 1
-        if state is SourceState.UNCHANGED and not options.rebuild:
+        # Sources scanned before record times were stored are re-read once to fill them.
+        needs_times = row is not None and row["first_record_at"] is None
+        if state is SourceState.UNCHANGED and not options.rebuild and not needs_times:
             entry["prefix_digest"] = previous.prefix_digest if previous else None
             return entry
 
@@ -303,14 +306,17 @@ class Scanner:
         events = [resolver.apply(e)[0] for e in adapter.parse(result.records, ctx)]
         touched = {e.actor.session_id for e in events if e.scope.repo_id is not None}
         kept = [e for e in events if e.actor.session_id in touched]
+        stamps = sorted(t for e in events if (t := e.order.utc_timestamp))
         digest = prefix_digest(source.path, result.processed_offset)
         entry["prefix_digest"] = digest
 
         with conn:
             conn.execute(
                 "INSERT INTO sources (source_id, provider, path, generation, prefix_digest, "
-                "processed_offset, snapshot_limit, parser_version, status, last_scanned_at) "
-                "VALUES (?,?,?,?,?,?,?,?, 'active', ?) ON CONFLICT(source_id) DO UPDATE SET "
+                "processed_offset, snapshot_limit, parser_version, status, last_scanned_at, "
+                "first_record_at, last_record_at) "
+                "VALUES (?,?,?,?,?,?,?,?, 'active', ?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET "
+                "first_record_at=excluded.first_record_at, last_record_at=excluded.last_record_at, "
                 "generation=excluded.generation, prefix_digest=excluded.prefix_digest, "
                 "processed_offset=excluded.processed_offset, "
                 "snapshot_limit=excluded.snapshot_limit, "
@@ -326,6 +332,8 @@ class Scanner:
                     limit,
                     adapter.version,
                     _now(),
+                    stamps[0] if stamps else None,
+                    stamps[-1] if stamps else None,
                 ),
             )
             if kept:

@@ -5,7 +5,7 @@
 - Codex ``*** Begin Patch`` text, whose hunks are anchored by context, not line numbers.
 
 ``apply_hunks`` places numbered hunks exactly and refuses on any context mismatch,
-because a verified edit needs the expected before-content at a unique location (ALG-03).
+because a verified edit needs the expected before-content at a unique location.
 """
 
 from __future__ import annotations
@@ -179,7 +179,7 @@ def _parse_update_hunks(lines: Sequence[str], i: int) -> tuple[tuple[Hunk, ...],
 
 
 def split_lines(text: str) -> list[str]:
-    """Split keeping no terminators; line endings are normalized (ALG-06)."""
+    """Split keeping no terminators; line endings are normalized."""
     return text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
 

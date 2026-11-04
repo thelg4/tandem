@@ -1,4 +1,4 @@
--- Attribution results per analysis run (spec §5, §12).
+-- Attribution results per analysis run.
 
 ALTER TABLE lineage ADD COLUMN state TEXT NOT NULL DEFAULT 'present';
     -- present | removed | dropped_before_commit | provisional | unavailable

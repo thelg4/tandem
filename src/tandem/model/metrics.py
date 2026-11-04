@@ -1,4 +1,4 @@
-"""Metric value contract (spec §8, DB-04).
+"""Metric value contract.
 
 Every value carries its numerator, denominator, horizon, and exclusion counts.
 A zero denominator is "not applicable", never 0 or infinity, and SQL null is
@@ -34,7 +34,7 @@ class MetricName(StrEnum):
     TOKENS_PER_SURVIVING_LINE = "tokens_per_surviving_line"
 
 
-# Presentation defaults, not significance thresholds (spec §8).
+# Presentation defaults, not significance thresholds.
 MIN_MATURE_LINES_FOR_COMPARISON = 30
 MIN_SESSIONS_FOR_COMPARISON = 3
 

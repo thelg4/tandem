@@ -1,4 +1,4 @@
-"""Stored durability scorecards: reading and rendering (spec §8, UX-02)."""
+"""Stored durability scorecards: reading and rendering."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""``tandem audit``: a structure-only summary of local agent logs (spec §2 SCOPE-01/02).
+"""``tandem audit``: a structure-only summary of local agent logs.
 
 Reports CLI versions, record types, tool names, and what the adapters recover:
 edits by evidence source, failed edit calls, reconstruction checks, and diagnostics.

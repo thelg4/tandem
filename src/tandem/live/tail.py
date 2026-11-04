@@ -2,7 +2,7 @@
 
 Reading goes through ``sources.jsonl.read_incremental`` so an unfinished trailing line
 waits for the next poll and a rewritten file is detected by its prefix fingerprint.
-Symlinks out of a root are never followed (NFR-04). Nothing here writes.
+Symlinks out of a root are never followed. Nothing here writes.
 """
 
 from __future__ import annotations

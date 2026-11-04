@@ -1,20 +1,20 @@
 [build-system]
-requires = ["hatchling>=1.24"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-# Distribution name is provisional (spec §2, "Naming and distribution"):
-# confirm availability on PyPI before publishing. The command name is `tandem`.
+# The command name is `tandem`; the distribution name avoids an existing PyPI project.
 name = "tandem-local"
 dynamic = ["version"]
 description = "Local-first provenance and durability analysis for Claude Code and Codex working on the same Git repository."
 readme = "README.md"
 requires-python = ">=3.11"
-# License intentionally unset until chosen (spec §18, "Open decisions").
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Thel Gunter" }]
 keywords = ["claude-code", "codex", "coding-agents", "git", "provenance", "evaluation"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Operating System :: MacOS",
@@ -25,11 +25,15 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Version Control :: Git",
 ]
-# Core scan/report keeps dependencies at zero; presentation extras are optional.
+# No runtime dependencies.
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/thelg4/tandem"
+Documentation = "https://github.com/thelg4/tandem/tree/main/docs"
+Issues = "https://github.com/thelg4/tandem/issues"
+
 [project.optional-dependencies]
-rich = ["rich>=13"]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 
 [project.scripts]
