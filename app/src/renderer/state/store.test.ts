@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WatcherMsg } from '../../shared/protocol'
 import { getAct, noteBell, noteInput, noteOutput } from './paneActivity'
-import { cellVisual, hasLiveDecay, paneStatus } from './selectors'
+import { cellVisual, hasLiveDecay, paneStatus, reuseUnchanged } from './selectors'
 import { initialState, reduce, type AppState } from './store'
 
 const T = Date.parse('2026-11-04T12:00:00.000Z')
@@ -130,5 +130,16 @@ describe('pane output does not dispatch per chunk', () => {
     for (let i = 0; i < 1000; i++) noteOutput('p1', T + i)
     expect(getAct('p1')?.lastOutput).toBe(T + 999)
     expect(withPane()).toEqual(s)
+  })
+})
+
+describe('reuseUnchanged', () => {
+  it('keeps the previous object for values that did not change', () => {
+    const prev = { p1: { a: 1, b: { c: 'x' } }, p2: { a: 2, b: null } }
+    const next = { p1: { a: 1, b: { c: 'x' } }, p2: { a: 3, b: null } }
+    const out = reuseUnchanged(prev, next)
+    expect(out.p1).toBe(prev.p1)
+    expect(out.p2).toBe(next.p2)
+    expect(reuseUnchanged(out, { ...out })).toBe(out)
   })
 })

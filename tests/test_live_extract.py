@@ -239,3 +239,19 @@ def test_shell_results_emit_done() -> None:
     out = {"type": "custom_tool_call_output", "call_id": "x1", "output": ""}
     (done,) = _acts(codex.feed(_codex("response_item", out)))
     assert (done.kind, done.phase) == ("shell", "done")
+
+
+def test_claude_sidechain_never_changes_the_turn() -> None:
+    """A subagent transcript must not mark its parent session idle or prompted."""
+    ex = ClaudeExtractor(sidechain=True)
+    prompt = {"type": "user", "cwd": "/r", "timestamp": TS, "message": {"content": "do it"}}
+    done = {
+        "type": "assistant",
+        "cwd": "/r",
+        "timestamp": TS,
+        "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "ok"}]},
+    }
+    duration = {"type": "system", "subtype": "turn_duration", "timestamp": TS}
+    signals = ex.feed(prompt) + ex.feed(done) + ex.feed(duration)
+    assert not any(isinstance(s, Turn) for s in signals)
+    assert not any(isinstance(s, Activity) and s.kind == "prompt" for s in signals)

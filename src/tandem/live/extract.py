@@ -76,7 +76,9 @@ class _Call:
 
 
 class ClaudeExtractor:
-    def __init__(self) -> None:
+    def __init__(self, *, sidechain: bool = False) -> None:
+        # A subagent transcript: its tool calls count, its turns and prompts do not.
+        self._sidechain = sidechain
         self._calls: dict[str, _Call] = {}
         self._cwd: str | None = None
         self._model: str | None = None
@@ -85,7 +87,20 @@ class ClaudeExtractor:
     def pending(self) -> int:
         return len(self._calls)
 
+    def fresh(self) -> ClaudeExtractor:
+        return ClaudeExtractor(sidechain=self._sidechain)
+
     def feed(self, rec: dict[str, Any]) -> list[Signal]:
+        signals = self._feed(rec)
+        if not self._sidechain:
+            return signals
+        return [
+            s
+            for s in signals
+            if not isinstance(s, Turn) and not (isinstance(s, Activity) and s.kind == "prompt")
+        ]
+
+    def _feed(self, rec: dict[str, Any]) -> list[Signal]:
         kind = rec.get("type")
         at = parse_iso(rec.get("timestamp"))
         out: list[Signal] = []
@@ -170,6 +185,9 @@ class CodexExtractor:
     @property
     def pending(self) -> int:
         return len(self._calls)
+
+    def fresh(self) -> CodexExtractor:
+        return CodexExtractor()
 
     def feed(self, rec: dict[str, Any]) -> list[Signal]:
         kind = rec.get("type")

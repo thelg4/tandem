@@ -70,3 +70,19 @@ def test_claude_registry(tmp_path: Path) -> None:
     (sessions / "15.json").write_text(json.dumps({"pid": "15", "sessionId": "u2"}))
     assert claude_registry(tmp_path) == {12: ("u1", "/r")}
     assert claude_registry(tmp_path / "nope") == {}
+
+
+def test_peek_cwd_stops_at_its_byte_budget(tmp_path: Path) -> None:
+    log = tmp_path / "c.jsonl"
+    junk = json.dumps({"type": "user", "message": {"content": "x" * 5000}})
+    log.write_text(junk + "\n" + json.dumps({"type": "user", "cwd": "/r"}) + "\n")
+    assert peek_cwd(log, AgentFamily.CLAUDE_CODE, max_bytes=1000) == (None, None)
+    assert peek_cwd(log, AgentFamily.CLAUDE_CODE) == ("/r", None)
+
+
+def test_peek_cwd_skips_the_rest_of_an_overlong_line(tmp_path: Path) -> None:
+    log = tmp_path / "c.jsonl"
+    # The tail of the long line is itself valid JSON and must not be read as a record.
+    long_line = "x" * 1000 + json.dumps({"type": "user", "cwd": "/wrong"})
+    log.write_text(long_line + "\n" + json.dumps({"type": "user", "cwd": "/r"}) + "\n")
+    assert peek_cwd(log, AgentFamily.CLAUDE_CODE, line_bytes=1000) == ("/r", None)

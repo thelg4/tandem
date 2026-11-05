@@ -83,3 +83,23 @@ export function hasLiveDecay(state: AppState, now: number): boolean {
     ),
   )
 }
+
+/**
+ * Return ``next`` with every value that equals its counterpart in ``prev`` replaced by
+ * the previous object, and ``prev`` itself when nothing changed. Memoized children then
+ * skip the clock-driven re-render unless what they show actually changed.
+ */
+export function reuseUnchanged<T>(prev: Record<string, T>, next: Record<string, T>): Record<string, T> {
+  const prevKeys = Object.keys(prev)
+  let same = prevKeys.length === Object.keys(next).length
+  const out: Record<string, T> = {}
+  for (const [key, value] of Object.entries(next)) {
+    const old = prev[key]
+    if (old !== undefined && JSON.stringify(old) === JSON.stringify(value)) out[key] = old
+    else {
+      out[key] = value
+      same = false
+    }
+  }
+  return same ? prev : out
+}

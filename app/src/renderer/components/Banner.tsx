@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { AGENT_NAMES } from '../../shared/protocol'
 import type { AppState } from '../state/store'
 
@@ -11,7 +11,7 @@ export function sessionNames(state: AppState, ids: string[]): string {
   return names.length <= 1 ? (names[0] ?? 'Sessions') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
 }
 
-export function Banner({ state }: { state: AppState }): JSX.Element | null {
+export const Banner = memo(function Banner({ state }: { state: AppState }): JSX.Element | null {
   const [dismissed, setDismissed] = useState<Record<string, number>>({})
   const active = Object.entries(state.overlaps).filter(
     ([path, o]) => o.level === 'active' && o.at > (dismissed[path] ?? 0),
@@ -31,4 +31,4 @@ export function Banner({ state }: { state: AppState }): JSX.Element | null {
       ))}
     </div>
   )
-}
+})

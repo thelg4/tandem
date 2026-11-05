@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { cellVisual, type CellVisual } from '../state/selectors'
 import type { AppState } from '../state/store'
 import { FileCard } from './FileCard'
@@ -75,7 +75,7 @@ interface Props {
   now: number
 }
 
-export function RepoMap({ state, now }: Props): JSX.Element {
+export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element {
   const [dir, setDir] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -140,4 +140,4 @@ export function RepoMap({ state, now }: Props): JSX.Element {
       {selected && <FileCard state={state} path={selected} now={now} onClose={() => setSelected(null)} />}
     </div>
   )
-}
+})

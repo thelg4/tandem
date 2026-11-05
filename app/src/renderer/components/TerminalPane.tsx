@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { AGENT_COLORS, AGENT_NAMES, type Agent } from '../../shared/protocol'
 import { noteBell, noteInput } from '../state/paneActivity'
 import { attach } from '../state/paneData'
@@ -32,7 +32,7 @@ const STATUS_TEXT: Record<PaneStatus, string> = {
   starting: 'starting',
 }
 
-export function TerminalPane({ paneId, agent, exited, header, onFocus, onClose, onRestart }: Props): JSX.Element {
+export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, header, onFocus, onClose, onRestart }: Props): JSX.Element {
   const host = useRef<HTMLDivElement>(null)
   const exitedRef = useRef(exited)
   exitedRef.current = exited
@@ -133,4 +133,4 @@ export function TerminalPane({ paneId, agent, exited, header, onFocus, onClose, 
       )}
     </div>
   )
-}
+})

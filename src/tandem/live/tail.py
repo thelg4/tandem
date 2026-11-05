@@ -10,12 +10,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from tandem.model.events import AgentFamily
 from tandem.sources.jsonl import Checkpoint, SourceState, read_incremental
 
 PEEK_LINE_BYTES = 4 * 1024 * 1024
+PEEK_TOTAL_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(slots=True)
@@ -53,18 +54,36 @@ def recent_logs(root: Path, since: float) -> list[Path]:
 
 
 def peek_cwd(
-    path: Path, agent: AgentFamily, max_lines: int = 200
+    path: Path,
+    agent: AgentFamily,
+    max_lines: int = 200,
+    *,
+    line_bytes: int = PEEK_LINE_BYTES,
+    max_bytes: int = PEEK_TOTAL_BYTES,
 ) -> tuple[str | None, dict[str, Any] | None]:
-    """Claude: the first recorded cwd. Codex: the session_meta cwd and payload."""
+    """Claude: the first recorded cwd. Codex: the session_meta cwd and payload.
+
+    Reads at most ``max_bytes`` in total. A line longer than ``line_bytes`` is skipped
+    whole, so its tail is never parsed as a record of its own.
+    """
     try:
         fh = path.open("rb")
     except OSError:
         return None, None
+    budget = max_bytes
     with fh:
         for _ in range(max_lines):
-            line = fh.readline(PEEK_LINE_BYTES)
+            line = fh.readline(min(line_bytes, budget))
             if not line:
                 break
+            budget -= len(line)
+            if not line.endswith(b"\n"):
+                if budget <= 0:
+                    break
+                budget = _skip_line(fh, budget)
+                if budget <= 0:
+                    break
+                continue
             try:
                 rec = json.loads(line)
             except (json.JSONDecodeError, UnicodeDecodeError):
@@ -80,7 +99,21 @@ def peek_cwd(
                 cwd = rec.get("cwd")
                 if isinstance(cwd, str) and cwd:
                     return cwd, None
+            if budget <= 0:
+                break
     return None, None
+
+
+def _skip_line(fh: BinaryIO, budget: int) -> int:
+    """Read past the rest of the current line; return what is left of the budget."""
+    while budget > 0:
+        chunk = fh.readline(min(64 * 1024, budget))
+        if not chunk:
+            return budget
+        budget -= len(chunk)
+        if chunk.endswith(b"\n"):
+            return budget
+    return budget
 
 
 def claude_registry(config_dir: Path) -> dict[int, tuple[str, str | None]]:
