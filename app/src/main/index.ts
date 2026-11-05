@@ -1,6 +1,17 @@
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, app, dialog, ipcMain, shell, type MenuItemConstructorOptions } from 'electron'
+import {
+  BrowserWindow,
+  Menu,
+  app,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  shell,
+  systemPreferences,
+  type BrowserWindowConstructorOptions,
+  type MenuItemConstructorOptions,
+} from 'electron'
 import type { Agent, MenuEvent } from '../shared/protocol'
 import { PaneManager } from './panes'
 import { WatcherBridge } from './watcher'
@@ -44,8 +55,9 @@ function sendMenu(event: MenuEvent): void {
 
 function buildMenu(): void {
   const newPane = (agent: Agent) => () => sendMenu({ kind: 'new-pane', agent })
+  const mac = process.platform === 'darwin'
   const template: MenuItemConstructorOptions[] = [
-    { role: 'appMenu' },
+    mac ? { role: 'appMenu' } : { label: 'File', submenu: [{ role: 'quit' }] },
     {
       label: 'Pane',
       submenu: [
@@ -64,13 +76,37 @@ function buildMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+/** The system accent color as #rrggbb; macOS only, elsewhere the renderer keeps its default. */
+function accentColor(): string | null {
+  if (process.platform !== 'darwin') return null
+  const rgba = systemPreferences.getAccentColor()
+  return /^[0-9a-f]{6}/i.test(rgba) ? `#${rgba.slice(0, 6)}` : null
+}
+
+/**
+ * macOS: the title bar folds into the toolbar (traffic lights inset) and the window
+ * shows the desktop through a sidebar material. Elsewhere: a normal frame, solid fill.
+ */
+function chrome(): BrowserWindowConstructorOptions {
+  if (process.platform === 'darwin') {
+    return {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 18, y: 18 },
+      vibrancy: 'sidebar',
+      visualEffectState: 'followWindow',
+      backgroundColor: '#00000000',
+    }
+  }
+  return { backgroundColor: nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#ececec' }
+}
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#0f1115',
+    ...chrome(),
     title: repoRoot ? `Tandem — ${repoRoot.split('/').pop()}` : 'Tandem',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -90,6 +126,8 @@ function createWindow(): void {
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  // The accent color can change in System Settings while the app runs.
+  win.on('focus', () => win?.webContents.send('accent', accentColor()))
   win.on('closed', () => {
     win = null
   })
@@ -120,6 +158,7 @@ function wire(repo: string): void {
     watcher?.reset()
   })
   ipcMain.handle('repo', () => ({ root: repo }))
+  ipcMain.handle('accent', () => accentColor())
   ipcMain.handle('pane:create', (_e, agent: Agent) => ({ paneId: panes!.create(agent) }))
   ipcMain.handle('pane:restart', (_e, paneId: string) => panes!.restart(paneId))
   ipcMain.on('pane:write', (_e, paneId: string, data: string) => panes?.write(paneId, data))

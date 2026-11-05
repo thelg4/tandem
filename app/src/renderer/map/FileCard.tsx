@@ -1,4 +1,5 @@
 import { sessionNames } from '../components/Banner'
+import { Icon } from '../components/Icon'
 import type { AppState } from '../state/store'
 import { touchLines } from './RepoMap'
 
@@ -17,7 +18,9 @@ export function FileCard({ state, path, now, onClose }: Props): JSX.Element {
     <div className="file-card">
       <div className="file-card-head">
         <code>{path}</code>
-        <button onClick={onClose}>×</button>
+        <button className="close" onClick={onClose} aria-label="Close">
+          <Icon name="xmark" size={12} />
+        </button>
       </div>
       {lines.length === 0 && <p className="muted">No agent has touched this file in this session.</p>}
       {lines.map((l) => (

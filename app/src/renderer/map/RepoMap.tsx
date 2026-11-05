@@ -4,8 +4,9 @@ import type { AppState } from '../state/store'
 import { FileCard } from './FileCard'
 import { buildLevel, layout, type MapNode, type Rect } from './tree'
 
-const BASE = '#1a1e26'
-const AMBER = '#e6a23c'
+// Theme colors from styles.css, so cells follow light and dark appearance.
+const BASE = 'var(--cell)'
+const AMBER = 'var(--amber)'
 
 function rgba(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1), 16)

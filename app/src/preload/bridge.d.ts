@@ -1,6 +1,11 @@
 import type { Agent, MenuEvent, WatcherMsg } from '../shared/protocol'
 
 export interface TandemBridge {
+  /** The OS, for platform-specific chrome: darwin gets the inset title bar and vibrancy. */
+  platform: string
+  /** The system accent color (#rrggbb), or null where the OS has none to offer. */
+  accent(): Promise<string | null>
+  onAccent(cb: (color: string | null) => void): () => void
   repo(): Promise<{ root: string } | null>
   /** Start the watcher once the renderer is listening, so no early message is lost. */
   ready(): void

@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { PaneCommand, WatcherMsg } from '../shared/protocol'
+import { resolvePython } from './agents'
 
 const MAX_QUEUED = 1000
 
@@ -62,13 +63,18 @@ export class WatcherBridge {
     this.proc?.kill('SIGKILL')
   }
 
+  /** The checkout's `src` in development; the copy bundled in Resources in a packaged app. */
+  private pythonSource(): string | null {
+    const candidates = [resolve(this.appRoot, '..', 'src')]
+    if (process.resourcesPath) candidates.push(join(process.resourcesPath, 'python'))
+    return candidates.find((dir) => existsSync(join(dir, 'tandem'))) ?? null
+  }
+
   private spawnProcess(): void {
-    const python = process.env.TANDEM_PYTHON || 'python3'
-    const src = resolve(this.appRoot, '..', 'src')
+    const python = resolvePython()
     const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUNBUFFERED: '1' }
-    if (existsSync(join(src, 'tandem'))) {
-      env.PYTHONPATH = env.PYTHONPATH ? `${src}:${env.PYTHONPATH}` : src
-    }
+    const src = this.pythonSource()
+    if (src) env.PYTHONPATH = env.PYTHONPATH ? `${src}:${env.PYTHONPATH}` : src
     const proc = spawn(python, ['-m', 'tandem', 'watch', this.repo], { env, stdio: 'pipe' })
     this.proc = proc
     proc.stdout.setEncoding('utf8')
