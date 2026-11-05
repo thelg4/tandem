@@ -15,10 +15,23 @@ import {
   type BrowserWindowConstructorOptions,
   type MenuItemConstructorOptions,
 } from 'electron'
-import type { Agent, FileContents, FileEdit, MenuEvent, OpenResult, PaneNotice, ProjectEntry, ProjectList } from '../shared/protocol'
+import type {
+  Agent,
+  Clash,
+  FileBlame,
+  FileContents,
+  FileEdit,
+  MenuEvent,
+  OpenResult,
+  PaneNotice,
+  ProjectEntry,
+  ProjectList,
+  WatcherMsg,
+} from '../shared/protocol'
 import { readRepoFile } from './files'
 import { PaneManager } from './panes'
-import { runTandemJson } from './python'
+import { runTandem, runTandemJson } from './python'
+import { ScanScheduler, clashesFromReport } from './scan'
 import { WatcherBridge } from './watcher'
 
 let win: BrowserWindow | null = null
@@ -77,27 +90,46 @@ function saveSettings(): void {
 // Shown notifications are kept referenced, or their click handlers can be collected.
 const notices = new Map<string, Notification>()
 
-function notify(notice: PaneNotice): void {
+/** A system notification unless notifications are off or Tandem is focused; one per key. */
+function showNotice(key: string, title: string, body: string, onClick: MenuEvent): void {
   if (!settings.notifications || !win || win.isFocused() || !Notification.isSupported()) return
-  notices.get(notice.paneId)?.close()
-  const n = new Notification({
-    title: notice.title,
-    subtitle: repoRoot ? basename(repoRoot) : undefined,
-    body: notice.body,
-  })
+  notices.get(key)?.close()
+  const n = new Notification({ title, subtitle: repoRoot ? basename(repoRoot) : undefined, body })
   n.on('click', () => {
     if (win) {
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
     }
-    sendMenu({ kind: 'focus-pane', paneId: notice.paneId })
+    sendMenu(onClick)
   })
   n.on('close', () => {
-    if (notices.get(notice.paneId) === n) notices.delete(notice.paneId)
+    if (notices.get(key) === n) notices.delete(key)
   })
-  notices.set(notice.paneId, n)
+  notices.set(key, n)
   n.show()
+}
+
+function notify(notice: PaneNotice): void {
+  showNotice(`pane:${notice.paneId}`, notice.title, notice.body, { kind: 'focus-pane', paneId: notice.paneId })
+}
+
+const NAMES: Record<Agent, string> = { claude_code: 'Claude', codex: 'Codex' }
+const VERBS: Record<Clash['label'], string> = {
+  exact_revert: 'reverted',
+  partial_revert: 'partly reverted',
+  rewrite: 'rewrote',
+  removal: 'removed',
+}
+
+function notifyClash(c: Clash): void {
+  const lines = c.lines === 1 ? '1 line' : `${c.lines} lines`
+  showNotice(
+    `clash:${c.id}`,
+    `${NAMES[c.later.agent]} ${VERBS[c.label]} ${NAMES[c.original.agent]}’s work`,
+    `${lines} in ${c.path}`,
+    { kind: 'open-file', path: c.path },
+  )
 }
 
 function clearNotices(): void {
@@ -260,11 +292,54 @@ async function listProjects(): Promise<ProjectList> {
 let started = false
 
 /** Points the app at a repository: ends the old panes and watcher, then reloads the window. */
+// Background scans keep blame and clash alerts current. The first scan after opening a
+// project only records which clashes exist; later ones notify about new ones.
+let scanner: ScanScheduler | null = null
+let clashes: Clash[] = []
+let seenClashes: Set<string> | null = null
+
+function makeScanner(top: string): ScanScheduler {
+  const appRoot = app.getAppPath()
+  const s: ScanScheduler = new ScanScheduler({
+    scan: () => runTandem(appRoot, ['scan', '--repo', top], 10 * 60_000),
+    now: () => Date.now(),
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (h) => clearTimeout(h as NodeJS.Timeout),
+    onStatus: (status) => win?.webContents.send('scan:status', status),
+    onScanned: () => {
+      void runTandemJson<unknown>(appRoot, ['report', top]).then((report) => {
+        if (scanner !== s || report === null) return
+        clashes = clashesFromReport(report, Date.now())
+        const first = seenClashes === null
+        seenClashes ??= new Set()
+        for (const c of clashes) {
+          if (!seenClashes.has(c.id) && !first) notifyClash(c)
+          seenClashes.add(c.id)
+        }
+        win?.webContents.send('clashes', clashes)
+      })
+    },
+  })
+  return s
+}
+
+/** Agent edits and unexplained changes are what make a new scan worth running. */
+function onWatcherMessage(msg: WatcherMsg): void {
+  win?.webContents.send('watcher:msg', msg)
+  if ((msg.type === 'activity' && msg.kind === 'edit' && msg.phase === 'done') || msg.type === 'change') {
+    scanner?.request()
+  }
+}
+
 function openRepo(path: string): boolean {
   const top = gitTopLevel(path)
   if (!top) return false
   panes?.killAll()
   watcher?.stop()
+  scanner?.stop()
+  scanner = makeScanner(top)
+  clashes = []
+  seenClashes = null
   clearNotices()
   app.setBadgeCount(0)
   repoRoot = top
@@ -272,7 +347,7 @@ function openRepo(path: string): boolean {
   watcher = new WatcherBridge(
     top,
     app.getAppPath(),
-    (msg) => win?.webContents.send('watcher:msg', msg),
+    onWatcherMessage,
     () => panes?.livePanes() ?? [],
   )
   panes = new PaneManager(top, {
@@ -326,6 +401,7 @@ function registerIpc(): void {
     if (!started) {
       started = true
       watcher.start()
+      scanner?.request(0)
       return
     }
     // The renderer reloaded and lost its panes: end their ptys and start a fresh
@@ -360,6 +436,12 @@ function registerIpc(): void {
     const out = await runTandemJson<{ edits: FileEdit[] }>(app.getAppPath(), ['edits', rel, '--repo', repoRoot])
     return out?.edits ?? null
   })
+  ipcMain.handle('file:blame', async (_e, rel: string): Promise<FileBlame | null> => {
+    if (!repoRoot || typeof rel !== 'string' || !rel) return null
+    return runTandemJson<FileBlame>(app.getAppPath(), ['blame', rel, '--repo', repoRoot])
+  })
+  ipcMain.handle('scan:status', () => scanner?.current() ?? { state: 'never', at: null })
+  ipcMain.handle('clashes', () => clashes)
   ipcMain.handle('usage', () => {
     if (Date.now() - usageAt > 15_000) void refreshUsage()
     return usage
@@ -396,6 +478,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  scanner?.stop()
   panes?.killAll()
   watcher?.stop()
 })

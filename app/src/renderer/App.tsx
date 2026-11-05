@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { AGENT_COLORS, AGENT_NAMES, type Agent } from '../shared/protocol'
+import { AGENT_COLORS, AGENT_NAMES, type Agent, type Clash, type ScanStatus } from '../shared/protocol'
 import { Banner, sessionNames } from './components/Banner'
 import { ExternalList } from './components/ExternalList'
 import { PaneStack } from './components/PaneStack'
@@ -29,6 +29,11 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
   const [state, dispatch] = useReducer(reduce, initialState)
   const [split, setSplit] = useState(0.55)
   const [timeline, setTimeline] = useState<string | null>(null)
+  const [scan, setScan] = useState<ScanStatus>({ state: 'never', at: null })
+  const [clashes, setClashes] = useState<Clash[]>([])
+  // A request to open a file in the right panel; ``n`` makes a repeat request count.
+  const [openRequest, setOpenRequest] = useState<{ path: string; n: number } | null>(null)
+  const openFile = useCallback((path: string) => setOpenRequest((r) => ({ path, n: (r?.n ?? 0) + 1 })), [])
   const focused = useRef<string | null>(null)
   const panesRef = useRef(state.panes)
   panesRef.current = state.panes
@@ -57,6 +62,7 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
       window.tandem.onPaneExit((paneId, code) => dispatch({ type: 'pane_exited', paneId, code })),
       window.tandem.onMenu((event) => {
         if (event.kind === 'new-pane') void addPane(event.agent)
+        else if (event.kind === 'open-file') openFile(event.path)
         else if (event.kind === 'focus-pane') {
           if (focusPane(event.paneId)) focused.current = event.paneId
         } else if (event.kind === 'close-pane') {
@@ -65,9 +71,12 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
         }
       }),
     ]
+    offs.push(window.tandem.onScanStatus(setScan), window.tandem.onClashes(setClashes))
+    void window.tandem.scanStatus().then(setScan)
+    void window.tandem.clashes().then(setClashes)
     window.tandem.ready()
     return () => offs.forEach((off) => off())
-  }, [addPane, closePane])
+  }, [addPane, closePane, openFile])
 
   const live = state.panes.some((p) => !p.exited)
   const decaying = hasLiveDecay(state, Date.now())
@@ -194,9 +203,16 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
         </section>
         <div className="divider-v" onPointerDown={startSplit} />
         <section className="right">
-          <Banner state={state} />
+          <Banner state={state} clashes={clashes} now={mapNow} onOpen={openFile} />
           <ExternalList state={state} />
-          <RepoMap state={state} now={mapNow} session={timeline} onCloseSession={onCloseTimeline} />
+          <RepoMap
+            state={state}
+            now={mapNow}
+            session={timeline}
+            onCloseSession={onCloseTimeline}
+            openRequest={openRequest}
+            scan={scan}
+          />
         </section>
       </main>
     </div>

@@ -1,6 +1,7 @@
 """Command-line interface.
 
-Commands: audit, scan, report, session, explain, doctor, demo.
+Commands: audit, scan, report, session, explain, blame, doctor, demo, and for the live
+workspace watch, projects, edits and usage.
 Exit codes: 0 ok (including a marked partial report), 2 invalid input, 3 unavailable
 data, 4 processing failure. Code 1 marks a command not implemented in this build.
 """
@@ -430,6 +431,69 @@ def cmd_edits(args: argparse.Namespace) -> int:
     return 0
 
 
+_WHO = {"claude_code": "Claude Code", "codex": "Codex"}
+
+
+def cmd_blame(args: argparse.Namespace) -> int:
+    from tandem.attribution.blame import blame_file
+    from tandem.report.views import safe
+
+    git = _git_for(args.repo)
+    info = git.discover()
+    top = info.top_level
+    target = Path(args.file)
+    if target.is_absolute():
+        try:
+            target = target.resolve().relative_to(top.resolve())
+        except ValueError as exc:
+            raise InvalidInputError(f"{args.file} is not inside {top}") from exc
+    rel = target.as_posix()
+    if rel.startswith("../") or rel == "..":
+        raise InvalidInputError(f"{args.file} is not inside {top}")
+    policy = load_policy(top, {})
+    file = top / rel
+    if not file.is_file():
+        raise InvalidInputError(f"{rel} is not a file in the working tree")
+    data = file.read_bytes()
+    if len(data) > policy.max_blob_bytes or b"\0" in data[:8192]:
+        raise InvalidInputError(f"{rel} is binary or larger than max_blob_bytes")
+    text = data.decode("utf-8", "surrogateescape")
+    path = _db_path(args, info.common_dir)
+    if not path.exists():
+        _err("tandem: no scan yet for this repository; run `tandem scan` first")
+        return int(ExitCode.UNAVAILABLE)
+    conn = db.connect(path, readonly=True)
+    try:
+        row = conn.execute(
+            "SELECT repo_id FROM repositories WHERE common_git_dir = ?", (str(info.common_dir),)
+        ).fetchone()
+        if row is None:
+            _err("tandem: no scan yet for this repository; run `tandem scan` first")
+            return int(ExitCode.UNAVAILABLE)
+        result = blame_file(conn, git, row["repo_id"], rel, text, policy)
+    finally:
+        conn.close()
+    if args.format == "json":
+        print(json.dumps(result.to_json()))
+        return 0
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+    width = len(str(len(lines)))
+    for span in result.spans:
+        if span.kind == "agent":
+            who = f"{_WHO.get(span.agent or '', span.agent)} ({span.evidence})"
+            if span.commit is None:
+                who += " uncommitted"
+        else:
+            who = {"baseline": "before history", "changed": "not in any log yet"}.get(
+                span.kind, "no log explains"
+            )
+        for n in range(span.start, span.start + span.count):
+            print(f"{who:<34} {n:>{width}}  {safe(lines[n - 1])}")
+    if result.note:
+        _err(f"tandem: {result.note.replace('_', ' ')}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tandem",
@@ -521,6 +585,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
     p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
     p.set_defaults(func=cmd_edits)
+
+    p = sub.add_parser("blame", help="show which agent wrote each line of a file")
+    p.add_argument("file", help="file path, relative to the repository or absolute")
+    p.add_argument("--repo", default=".", metavar="PATH", help="repository (default: .)")
+    p.add_argument("--db", metavar="PATH", help="database path (default: per-user data dir)")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.set_defaults(func=cmd_blame)
 
     p = sub.add_parser("usage", help="token usage today and this week, and Codex plan limits")
     p.add_argument("--format", choices=["text", "json"], default="text")

@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import type { ScanStatus } from '../../shared/protocol'
 import { cellVisual, type CellVisual } from '../state/selectors'
 import type { AppState } from '../state/store'
 import { ActivityList } from './ActivityList'
@@ -79,9 +80,12 @@ interface Props {
   /** A session whose timeline replaces the list, or null. */
   session: string | null
   onCloseSession: () => void
+  /** Open this file, from a clash alert or a notification. */
+  openRequest: { path: string; n: number } | null
+  scan: ScanStatus
 }
 
-export const RepoMap = memo(function RepoMap({ state, now, session, onCloseSession }: Props): JSX.Element {
+export const RepoMap = memo(function RepoMap({ state, now, session, onCloseSession, openRequest, scan }: Props): JSX.Element {
   const [view, setView] = useState<'activity' | 'map'>('activity')
   const [dir, setDir] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
@@ -92,6 +96,10 @@ export const RepoMap = memo(function RepoMap({ state, now, session, onCloseSessi
   }
   // A newly chosen timeline comes to the front, over any open file.
   useEffect(() => setOpenPath(null), [session])
+  useEffect(() => {
+    if (openRequest) openFile(openRequest.path)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest])
   const [size, setSize] = useState({ w: 0, h: 0 })
   const box = useRef<HTMLDivElement>(null)
 
@@ -109,7 +117,7 @@ export const RepoMap = memo(function RepoMap({ state, now, session, onCloseSessi
 
   return (
     <div className="map">
-      {openPath && <FileView state={state} path={openPath} now={now} onBack={() => setOpenPath(null)} />}
+      {openPath && <FileView state={state} path={openPath} now={now} scan={scan} onBack={() => setOpenPath(null)} />}
       {session && !openPath && (
         <SessionTimeline state={state} sessionId={session} now={now} selected={selected} onOpen={openFile} onBack={onCloseSession} />
       )}

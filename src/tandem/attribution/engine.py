@@ -290,6 +290,14 @@ class Engine:
         self._finish()
         return self.result
 
+    def final_lines(self, path: str) -> list[Line] | None:
+        """A tracked file's lines after the run: the working state if edits followed the
+        last commit, else the committed state. None for untracked or untrackable files."""
+        state = self.files.get(path)
+        if state is None:
+            return None
+        return state.working if state.dirty else state.committed
+
     def _apply_batch(self, edits: list[AttrEdit]) -> None:
         for e in self._order_ties(edits):
             self._apply_edit(e)
