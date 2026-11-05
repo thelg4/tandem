@@ -1,6 +1,7 @@
 import { memo, useState } from 'react'
 import { AGENT_NAMES } from '../../shared/protocol'
 import type { AppState } from '../state/store'
+import { Icon } from './Icon'
 
 export function sessionNames(state: AppState, ids: string[]): string {
   const agents = ids.map((id) => state.sessions[id]?.agent).filter((a) => a !== undefined)
@@ -21,11 +22,12 @@ export const Banner = memo(function Banner({ state }: { state: AppState }): JSX.
     <div className="banner">
       {active.map(([path, o]) => (
         <div className="banner-row" key={path}>
-          <span>
-            ⚠ {sessionNames(state, o.sessions)} are both editing <code>{path}</code>
+          <Icon name="warning" />
+          <span className="banner-text">
+            {sessionNames(state, o.sessions)} are both editing <code>{path}</code>
           </span>
-          <button onClick={() => setDismissed((d) => ({ ...d, [path]: o.at }))} title="Hide until it changes">
-            ×
+          <button onClick={() => setDismissed((d) => ({ ...d, [path]: o.at }))} title="Hide until it changes" aria-label="Hide">
+            <Icon name="xmark" size={12} />
           </button>
         </div>
       ))}

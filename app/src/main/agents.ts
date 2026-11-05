@@ -4,11 +4,13 @@ import type { Agent } from '../shared/protocol'
 
 const CODEX_APP_BUNDLE = '/Applications/ChatGPT.app/Contents/Resources/codex'
 
-export function loginShell(): string {
-  return process.env.SHELL || '/bin/zsh'
+/** The user's shell; when $SHELL is unset, the platform's default login shell. */
+export function loginShell(platform: NodeJS.Platform = process.platform): string {
+  return process.env.SHELL || (platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
 }
 
-function onLoginPath(bin: string): string | null {
+/** Where `bin` is on the login PATH. An app opened from the Dock or a desktop launcher has a bare PATH. */
+export function onLoginPath(bin: string): string | null {
   try {
     const out = execFileSync(loginShell(), ['-l', '-c', `command -v ${bin}`], {
       encoding: 'utf8',
@@ -30,6 +32,15 @@ export function resolveCodex(): string {
     onLoginPath('codex') ||
     (existsSync(CODEX_APP_BUNDLE) ? CODEX_APP_BUNDLE : 'codex')
   return codexCache
+}
+
+let pythonCache: string | null = null
+
+/** TANDEM_PYTHON, then `python3` on the login PATH, then plain `python3`. */
+export function resolvePython(): string {
+  if (process.env.TANDEM_PYTHON) return process.env.TANDEM_PYTHON
+  pythonCache ??= onLoginPath('python3') || 'python3'
+  return pythonCache
 }
 
 export function shellQuote(s: string): string {

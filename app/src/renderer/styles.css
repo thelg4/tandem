@@ -1,13 +1,82 @@
+/*
+ * Apple's design language: system colors, SF type at macOS sizes, hairline separators,
+ * a unified toolbar over a translucent window. Light and dark follow the system.
+ * html[data-platform='darwin'] adds the macOS-only chrome (inset traffic lights,
+ * vibrancy); other platforms get the same palette on a solid window.
+ */
+
 :root {
-  --bg: #0f1115;
-  --panel: #161921;
-  --line: #262a34;
-  --text: #c9ccd3;
-  --muted: #7d828c;
-  --red: #e5484d;
+  color-scheme: light dark;
+
+  /* Dark appearance (default). */
+  --window: #1e1e1e;
+  --content: #1e1e1e;
+  --surface: rgba(255, 255, 255, 0.04);
+  --popover: #2c2c2e;
+  --label: rgba(255, 255, 255, 0.86);
+  --secondary: rgba(255, 255, 255, 0.55);
+  --tertiary: rgba(255, 255, 255, 0.3);
+  --separator: rgba(255, 255, 255, 0.1);
+  --control: rgba(255, 255, 255, 0.1);
+  --control-hover: rgba(255, 255, 255, 0.15);
+  --control-pressed: rgba(255, 255, 255, 0.22);
+  --control-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35), inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.07);
+  --cell: rgba(255, 255, 255, 0.06);
+  --cell-border: rgba(255, 255, 255, 0.09);
+  --scrim: rgba(30, 30, 30, 0.78);
+  --shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
+  --accent: #0a84ff;
+  --red: #ff453a;
+  --red-tint: rgba(255, 69, 58, 0.14);
+  --red-text: #ff6961;
   --amber: #e6a23c;
-  --waiting: #e6c34a;
-  color-scheme: dark;
+  --waiting: #ffd60a;
+
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Cantarell, Ubuntu, 'Noto Sans', sans-serif;
+  --mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
+  --radius: 10px;
+  --toolbar-h: 52px;
+  --toolbar-inset: 12px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --window: #ececec;
+    --content: #ffffff;
+    --surface: rgba(255, 255, 255, 0.55);
+    --popover: #ffffff;
+    --label: rgba(0, 0, 0, 0.85);
+    --secondary: rgba(0, 0, 0, 0.5);
+    --tertiary: rgba(0, 0, 0, 0.26);
+    --separator: rgba(0, 0, 0, 0.1);
+    --control: #ffffff;
+    --control-hover: #f5f5f5;
+    --control-pressed: #e3e3e3;
+    --control-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 0.5px 1.5px rgba(0, 0, 0, 0.1);
+    --hover: rgba(0, 0, 0, 0.05);
+    --cell: rgba(0, 0, 0, 0.045);
+    --cell-border: rgba(0, 0, 0, 0.08);
+    --scrim: rgba(255, 255, 255, 0.82);
+    --shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 10px 30px rgba(0, 0, 0, 0.16);
+    --accent: #007aff;
+    --red: #ff3b30;
+    --red-tint: rgba(255, 59, 48, 0.1);
+    --red-text: #d70015;
+    --amber: #c9820a;
+    --waiting: #b88a00;
+  }
+}
+
+/* macOS: the window is a sidebar material; the toolbar clears the traffic lights. */
+html[data-platform='darwin'] {
+  --window: transparent;
+  --toolbar-inset: 86px;
+}
+
+/* Elsewhere a native frame draws the title, so the toolbar can be shorter. */
+html:not([data-platform='darwin']) {
+  --toolbar-h: 44px;
 }
 
 * {
@@ -19,10 +88,13 @@ body,
 #root {
   margin: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  background: var(--window);
+  color: var(--label);
+  font: 13px/1.38 var(--font);
+  -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  user-select: none;
+  cursor: default;
 }
 
 button {
@@ -30,16 +102,43 @@ button {
   color: inherit;
   background: none;
   border: 0;
-  cursor: pointer;
+  padding: 0;
+  cursor: default;
 }
 
-code {
-  font-family: Menlo, ui-monospace, monospace;
-  font-size: 12px;
+button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
+code,
+kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+kbd {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--control);
+  box-shadow: var(--control-shadow);
+  color: var(--label);
+}
+
+h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--secondary);
+}
+
+.icon {
+  flex-shrink: 0;
 }
 
 .app {
@@ -48,15 +147,16 @@ code {
   height: 100%;
 }
 
-/* Toolbar --------------------------------------------------------------------- */
+/* Toolbar ------------------------------------------------------------------------ */
 
 .toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 40px;
-  padding: 0 12px 0 80px; /* clear the macOS traffic lights */
-  border-bottom: 1px solid var(--line);
+  height: var(--toolbar-h);
+  flex-shrink: 0;
+  padding: 0 14px 0 var(--toolbar-inset);
+  border-bottom: 1px solid var(--separator);
   -webkit-app-region: drag;
 }
 
@@ -65,58 +165,131 @@ code {
   -webkit-app-region: no-drag;
 }
 
-.brand {
-  font-weight: 600;
-  letter-spacing: 0.04em;
+.toolbar-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
 }
 
-.repo {
-  color: var(--muted);
-  margin-right: 8px;
+.toolbar-title .title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-title .subtitle {
+  font-size: 11px;
+  color: var(--secondary);
 }
 
 .spacer {
   flex: 1;
 }
 
-.add {
-  border: 1px solid color-mix(in srgb, var(--agent) 60%, transparent);
-  color: var(--agent);
+/* Segmented control: one rounded capsule, hairline dividers between segments. */
+.segmented {
+  display: inline-flex;
   border-radius: 6px;
-  padding: 3px 10px;
+  background: var(--control);
+  box-shadow: var(--control-shadow);
+  overflow: hidden;
 }
 
-.add:hover {
-  background: color-mix(in srgb, var(--agent) 14%, transparent);
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 11px;
 }
 
-.add.big {
-  padding: 8px 18px;
-  font-size: 14px;
-  margin: 0 6px;
+.segmented button + button {
+  border-left: 1px solid var(--separator);
 }
 
-.toggle {
-  border: 1px solid var(--line);
+.segmented button:hover {
+  background: var(--control-hover);
+}
+
+.segmented button:active {
+  background: var(--control-pressed);
+}
+
+.agent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--agent);
+  flex-shrink: 0;
+}
+
+/* Borderless toolbar button: a background only on hover or while on. */
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
   border-radius: 6px;
-  padding: 3px 10px;
-  color: var(--muted);
+  color: var(--secondary);
 }
 
-.toggle.on {
-  color: var(--text);
-  background: var(--panel);
+.tool:hover {
+  background: var(--hover);
+  color: var(--label);
+}
+
+.tool.on {
+  background: var(--control-pressed);
+  color: var(--label);
+}
+
+.tool.on .icon {
+  color: var(--accent);
 }
 
 .diag {
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .diag.warn {
   color: var(--amber);
 }
 
-/* Layout ---------------------------------------------------------------------- */
+/* Push button (the empty state). */
+.push {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: var(--control);
+  box-shadow: var(--control-shadow);
+}
+
+.push:hover {
+  background: var(--control-hover);
+}
+
+.push:active {
+  background: var(--control-pressed);
+}
+
+.push.big {
+  height: 30px;
+  padding: 0 16px;
+  margin: 0 5px;
+}
+
+/* Layout ------------------------------------------------------------------------- */
 
 .workspace {
   flex: 1;
@@ -130,26 +303,26 @@ code {
   min-width: 0;
   flex-grow: 0;
   flex-shrink: 0;
-  padding: 8px 0 8px 8px;
+  padding: 10px 0 10px 10px;
 }
 
 .right {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 8px 8px 8px 0;
+  padding: 10px 10px 10px 0;
 }
 
 .divider-v {
-  width: 8px;
+  width: 10px;
   cursor: col-resize;
   flex-shrink: 0;
 }
 
 .divider-h {
-  height: 6px;
+  height: 8px;
   cursor: row-resize;
   flex-shrink: 0;
 }
@@ -159,7 +332,17 @@ code {
   text-align: center;
 }
 
-/* Panes ----------------------------------------------------------------------- */
+.empty-panes .muted {
+  margin: 0 0 18px;
+}
+
+.hint {
+  margin-top: 22px;
+  font-size: 11px;
+  color: var(--secondary);
+}
+
+/* Panes -------------------------------------------------------------------------- */
 
 .pane-stack {
   flex: 1;
@@ -180,43 +363,44 @@ code {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: #11141a;
-  border: 1.5px solid var(--line);
-  border-radius: 8px;
+  background: var(--content);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px var(--separator), 0 1px 3px rgba(0, 0, 0, 0.12);
   overflow: hidden;
-  transition: border-color 0.4s ease;
+  transition: box-shadow 0.4s ease;
 }
 
 .pane-overlap {
-  border-color: var(--red);
+  box-shadow: 0 0 0 1.5px var(--red), 0 0 0 4px var(--red-tint);
 }
 
 .pane-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 28px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--line);
+  gap: 7px;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--separator);
   white-space: nowrap;
   font-size: 12px;
 }
 
 .pane-agent {
-  color: var(--agent);
   font-weight: 600;
 }
 
 .pane-status {
-  color: var(--muted);
+  color: var(--secondary);
 }
 
 .pane-status.waiting {
   color: var(--waiting);
+  font-weight: 500;
 }
 
 .pane-title {
-  color: var(--muted);
+  color: var(--secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
@@ -224,60 +408,82 @@ code {
 
 .pane-file {
   margin-left: auto;
-  font-family: Menlo, ui-monospace, monospace;
+  font-family: var(--mono);
   font-size: 11px;
+  color: var(--secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
 }
 
 .overlap-text {
-  color: #ff8a8d;
+  color: var(--red-text);
 }
 
 .amber-text {
   color: var(--amber);
 }
 
-.pane-close {
-  color: var(--muted);
-  font-size: 15px;
-  margin-left: 4px;
+.pane-close,
+.banner-row button,
+.file-card .close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  color: var(--secondary);
 }
 
-.pane-close:hover {
-  color: var(--text);
+.pane-close {
+  margin-left: 2px;
+}
+
+.pane-close:hover,
+.banner-row button:hover,
+.file-card .close:hover {
+  background: var(--hover);
+  color: var(--label);
 }
 
 .pane-body {
   flex: 1;
   min-height: 0;
-  padding: 4px 0 0 6px;
+  padding: 6px 0 2px 10px;
 }
 
 .pane-exited {
   position: absolute;
-  inset: 28px 0 0 0;
+  inset: 30px 0 0 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 17, 21, 0.72);
-  color: var(--muted);
-  cursor: pointer;
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+  color: var(--secondary);
 }
 
-/* Status dots ------------------------------------------------------------------ */
+.pane-exited span {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: var(--control);
+  box-shadow: var(--control-shadow);
+}
+
+/* Status dots ---------------------------------------------------------------------- */
 
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--agent, #8a8f98) 40%, #2a2e38);
+  background: color-mix(in srgb, var(--agent, #8e8e93) 45%, transparent);
   flex-shrink: 0;
 }
 
 .dot.working {
-  background: var(--agent, #8a8f98);
+  background: var(--agent, #8e8e93);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
@@ -288,13 +494,13 @@ code {
 
 .dot.exited {
   background: transparent;
-  border: 1px solid var(--muted);
+  border: 1px solid var(--tertiary);
 }
 
 @keyframes pulse {
   50% {
-    transform: scale(1.5);
-    opacity: 0.5;
+    transform: scale(1.4);
+    opacity: 0.55;
   }
 }
 
@@ -304,36 +510,44 @@ code {
   }
 }
 
-/* Banner and external list ---------------------------------------------------------- */
+/* Banner and external list ------------------------------------------------------------ */
 
 .banner {
-  border: 1px solid var(--red);
-  background: rgba(229, 72, 77, 0.12);
-  color: #ffb3b5;
-  border-radius: 8px;
-  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--red-tint);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent);
+  color: var(--red-text);
+  padding: 7px 8px 7px 12px;
 }
 
 .banner-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+}
+
+.banner-text {
+  flex: 1;
+  color: var(--label);
+}
+
+.banner-row button {
+  color: var(--red-text);
 }
 
 .external {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 14px;
+  gap: 6px 16px;
+  padding: 0 4px;
   font-size: 12px;
 }
 
 .external .label {
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 10px;
+  color: var(--secondary);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .ext {
@@ -343,14 +557,14 @@ code {
 }
 
 .ext-title {
-  color: var(--muted);
+  color: var(--secondary);
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Repo map ---------------------------------------------------------------------- */
+/* Repo map ------------------------------------------------------------------------- */
 
 .map {
   position: relative;
@@ -358,20 +572,35 @@ code {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px var(--separator);
+  padding: 8px;
+}
+
+html:not([data-platform='darwin']) .map {
+  background: var(--content);
 }
 
 .crumbs {
   font-size: 12px;
-  padding: 0 2px 6px;
-  color: var(--muted);
+  padding: 0 2px 8px;
+  color: var(--secondary);
+}
+
+.crumbs button {
+  padding: 1px 4px;
+  border-radius: 4px;
 }
 
 .crumbs button:hover {
-  color: var(--text);
+  background: var(--hover);
+  color: var(--label);
+}
+
+.crumbs > button:first-child {
+  color: var(--label);
+  font-weight: 600;
 }
 
 .map-area {
@@ -383,46 +612,50 @@ code {
 .cell,
 .group {
   position: absolute;
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .cell {
   transition: background 0.6s ease, box-shadow 0.6s ease;
-  cursor: pointer;
-}
-
-.cell.dir {
-  outline: 1px dashed #333846;
+  outline: 1px solid var(--cell-border);
   outline-offset: -1px;
 }
 
+.cell.dir {
+  outline-style: dashed;
+}
+
 .cell.selected {
-  outline: 1.5px solid var(--text);
-  outline-offset: -1.5px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .cell:hover {
-  filter: brightness(1.25);
+  filter: brightness(1.15) saturate(1.1);
 }
 
 .group {
-  border: 1px solid #2a2f3a;
+  border: 1px solid var(--separator);
   pointer-events: none;
 }
 
 .group-label,
 .cell-label {
   position: absolute;
-  top: 1px;
-  left: 4px;
+  top: 2px;
+  left: 5px;
   right: 4px;
   font-size: 10px;
-  color: #9aa0aa;
+  color: var(--secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+}
+
+.group-label {
+  font-weight: 600;
 }
 
 .dir-hint {
@@ -431,7 +664,7 @@ code {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
+  color: var(--tertiary);
   font-size: 11px;
   pointer-events: none;
 }
@@ -443,7 +676,7 @@ code {
 
 @keyframes redpulse {
   50% {
-    box-shadow: inset 0 0 0 2px var(--red), 0 0 12px 2px rgba(229, 72, 77, 0.55);
+    box-shadow: inset 0 0 0 2px var(--red), 0 0 12px 2px color-mix(in srgb, var(--red) 50%, transparent);
   }
 }
 
@@ -453,31 +686,45 @@ code {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
+  color: var(--secondary);
 }
 
+/* Popover-style card for the selected file. */
 .file-card {
   position: absolute;
-  right: 14px;
-  bottom: 14px;
+  right: 16px;
+  bottom: 16px;
   width: 300px;
-  background: #1d212b;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
+  background: var(--popover);
+  border-radius: 12px;
+  padding: 10px 10px 10px 12px;
   font-size: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow);
+  user-select: text;
 }
 
 .file-card p {
-  margin: 4px 0;
+  margin: 5px 0;
 }
 
 .file-card-head {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 8px;
   word-break: break-all;
+  font-weight: 600;
+}
+
+.file-card-head code {
+  font-size: 12px;
+}
+
+/* xterm owns its own text selection and cursor. */
+.pane-body,
+.pane-body * {
+  user-select: text;
+  cursor: text;
 }
 
 /* Motion budget: calm mode and reduced motion turn pulses into static color. */

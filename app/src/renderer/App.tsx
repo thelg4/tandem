@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import type { Agent } from '../shared/protocol'
+import { AGENT_COLORS, type Agent } from '../shared/protocol'
 import { Banner, sessionNames } from './components/Banner'
 import { ExternalList } from './components/ExternalList'
 import { PaneStack } from './components/PaneStack'
 import type { PaneHeader } from './components/TerminalPane'
 import { Toolbar } from './components/Toolbar'
 import { RepoMap } from './map/RepoMap'
+import { shortcut } from './platform'
 import { forgetPane, getAct } from './state/paneActivity'
 import { forgetPaneData, installPaneDataListener } from './state/paneData'
 import { hasLiveDecay, paneSession, paneStatus, reuseUnchanged } from './state/selectors'
@@ -124,16 +125,21 @@ export function App(): JSX.Element {
         <section className="left" style={{ flexBasis: `${split * 100}%` }}>
           {state.panes.length === 0 ? (
             <div className="empty-panes">
-              <p>Start an agent in this repository.</p>
+              <h2>No agents running</h2>
+              <p className="muted">Start Claude Code or Codex in this repository.</p>
               <div>
-                <button className="add big" style={{ ['--agent' as string]: '#e0825f' }} onClick={() => void addPane('claude_code')}>
-                  + Claude
+                <button className="push big" onClick={() => void addPane('claude_code')}>
+                  <span className="agent-dot" style={{ ['--agent' as string]: AGENT_COLORS.claude_code }} />
+                  New Claude Pane
                 </button>
-                <button className="add big" style={{ ['--agent' as string]: '#3fbf96' }} onClick={() => void addPane('codex')}>
-                  + Codex
+                <button className="push big" onClick={() => void addPane('codex')}>
+                  <span className="agent-dot" style={{ ['--agent' as string]: AGENT_COLORS.codex }} />
+                  New Codex Pane
                 </button>
               </div>
-              <p className="muted">⌘T new Claude pane · ⇧⌘T new Codex pane · ⌘W close</p>
+              <p className="hint">
+                <kbd>{shortcut('T')}</kbd> Claude · <kbd>{shortcut('T', true)}</kbd> Codex · <kbd>{shortcut('W')}</kbd> close
+              </p>
             </div>
           ) : (
             <PaneStack

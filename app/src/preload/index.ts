@@ -8,6 +8,9 @@ function listen<A extends unknown[]>(channel: string, cb: (...args: A) => void):
 }
 
 const bridge: TandemBridge = {
+  platform: process.platform,
+  accent: () => ipcRenderer.invoke('accent'),
+  onAccent: (cb) => listen('accent', cb),
   repo: () => ipcRenderer.invoke('repo'),
   ready: () => ipcRenderer.send('ready'),
   createPane: (agent) => ipcRenderer.invoke('pane:create', agent),
