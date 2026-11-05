@@ -1,4 +1,4 @@
-import type { Agent, MenuEvent, OpenResult, ProjectList, UsageSummary, WatcherMsg } from '../shared/protocol'
+import type { Agent, FileContents, FileEdit, MenuEvent, OpenResult, ProjectList, UsageSummary, WatcherMsg } from '../shared/protocol'
 
 export interface TandemBridge {
   /** The OS, for platform-specific chrome: darwin gets the inset title bar and vibrancy. */
@@ -16,6 +16,10 @@ export interface TandemBridge {
   /** The latest usage summary (refreshed in the background), or null before the first. */
   usage(): Promise<UsageSummary | null>
   onUsage(cb: (usage: UsageSummary) => void): () => void
+  /** A file in the open repository, by repo-relative path; refused outside it. */
+  readFile(rel: string): Promise<FileContents>
+  /** Successful agent edits to a file from the logs, newest first; null if unavailable. */
+  fileEdits(rel: string): Promise<FileEdit[] | null>
   /** Start the watcher once the renderer is listening, so no early message is lost. */
   ready(): void
   createPane(agent: Agent): Promise<{ paneId: string }>

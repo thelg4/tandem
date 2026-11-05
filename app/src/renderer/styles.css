@@ -32,6 +32,19 @@
   --red-text: #ff6961;
   --amber: #e6a23c;
   --waiting: #ffd60a;
+  --diff-add: rgba(48, 209, 88, 0.16);
+  --diff-del: rgba(255, 69, 58, 0.16);
+  --diff-add-text: #30d158;
+  --diff-del-text: #ff6961;
+  /* Syntax colors after Xcode's Default (Dark). */
+  --syn-keyword: #fc5fa3;
+  --syn-string: #fc6a5d;
+  --syn-comment: #7f8c98;
+  --syn-number: #d0bf69;
+  --syn-type: #5dd8ff;
+  --syn-title: #67b7a4;
+  --syn-attr: #bf8555;
+  --syn-meta: #fd8f3f;
 
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Cantarell, Ubuntu, 'Noto Sans', sans-serif;
   --mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
@@ -65,6 +78,19 @@
     --red-text: #d70015;
     --amber: #c9820a;
     --waiting: #b88a00;
+    --diff-add: rgba(52, 199, 89, 0.14);
+    --diff-del: rgba(255, 59, 48, 0.12);
+    --diff-add-text: #1f7a35;
+    --diff-del-text: #c41a16;
+    /* Syntax colors after Xcode's Default (Light). */
+    --syn-keyword: #9b2393;
+    --syn-string: #c41a16;
+    --syn-comment: #5d6c79;
+    --syn-number: #1c00cf;
+    --syn-type: #0b4f79;
+    --syn-title: #326d74;
+    --syn-attr: #815f03;
+    --syn-meta: #643820;
   }
 }
 
@@ -81,6 +107,10 @@ html:not([data-platform='darwin']) {
 
 * {
   box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 html,
@@ -474,8 +504,7 @@ h2 {
 }
 
 .pane-close,
-.banner-row button,
-.file-card .close {
+.banner-row button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -491,8 +520,7 @@ h2 {
 }
 
 .pane-close:hover,
-.banner-row button:hover,
-.file-card .close:hover {
+.banner-row button:hover {
   background: var(--hover);
   color: var(--label);
 }
@@ -1105,6 +1133,257 @@ h2 {
   color: var(--red-text);
 }
 
+/* File view: edits from the logs, and the file itself ---------------------------------- */
+
+.file-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.file-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--separator);
+  color: var(--secondary);
+}
+
+.tool.back {
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+}
+
+.file-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.file-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 10px;
+  user-select: text;
+}
+
+.view-note {
+  margin: 24px 16px;
+  text-align: center;
+  color: var(--secondary);
+}
+
+.edits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edit {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--separator);
+  background: var(--content);
+  overflow: hidden;
+}
+
+.edit-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--separator);
+  box-shadow: inset 3px 0 0 var(--agent);
+}
+
+.edit-agent {
+  font-weight: 600;
+}
+
+.edit-title {
+  color: var(--secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.edit-stat {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.edit-stat .plus {
+  color: var(--diff-add-text);
+}
+
+.edit-stat .minus {
+  color: var(--diff-del-text);
+}
+
+.edit-time {
+  color: var(--secondary);
+  white-space: nowrap;
+}
+
+.edit-note {
+  margin: 8px 10px;
+  font-size: 12px;
+  color: var(--secondary);
+}
+
+.diff {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.hunk-head {
+  padding: 2px 10px;
+  background: var(--hover);
+  color: var(--secondary);
+  font-family: var(--font);
+  font-size: 11px;
+}
+
+.dl {
+  display: flex;
+  min-width: max-content;
+}
+
+.dl .ln {
+  width: 40px;
+  flex-shrink: 0;
+  padding-right: 6px;
+  text-align: right;
+  color: var(--tertiary);
+  user-select: none;
+}
+
+.dl .sign {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  user-select: none;
+}
+
+.dl .code {
+  white-space: pre;
+  padding-right: 12px;
+}
+
+.dl.add {
+  background: var(--diff-add);
+}
+
+.dl.add .sign {
+  color: var(--diff-add-text);
+}
+
+.dl.del {
+  background: var(--diff-del);
+}
+
+.dl.del .sign {
+  color: var(--diff-del-text);
+}
+
+.source {
+  display: flex;
+  min-width: max-content;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.source pre {
+  margin: 0;
+  font: inherit;
+}
+
+.source .gutter {
+  position: sticky;
+  left: 0;
+  padding: 0 10px 0 4px;
+  text-align: right;
+  color: var(--tertiary);
+  background: var(--surface);
+  user-select: none;
+}
+
+html:not([data-platform='darwin']) .source .gutter {
+  background: var(--content);
+}
+
+.source .code {
+  padding: 0 16px 0 8px;
+}
+
+.hljs-keyword,
+.hljs-literal,
+.hljs-built_in,
+.hljs-selector-tag {
+  color: var(--syn-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-char {
+  color: var(--syn-string);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.hljs-number,
+.hljs-symbol {
+  color: var(--syn-number);
+}
+
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-title.class_ {
+  color: var(--syn-type);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: var(--syn-title);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-property,
+.hljs-params {
+  color: var(--syn-attr);
+}
+
+.hljs-meta,
+.hljs-tag,
+.hljs-name {
+  color: var(--syn-meta);
+}
+
+.hljs-addition {
+  color: var(--diff-add-text);
+}
+
+.hljs-deletion {
+  color: var(--diff-del-text);
+}
+
 /* Repo map ------------------------------------------------------------------------- */
 
 .map {
@@ -1228,37 +1507,6 @@ html:not([data-platform='darwin']) .map {
   align-items: center;
   justify-content: center;
   color: var(--secondary);
-}
-
-/* Popover-style card for the selected file. */
-.file-card {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  width: 300px;
-  background: var(--popover);
-  border-radius: 12px;
-  padding: 10px 10px 10px 12px;
-  font-size: 12px;
-  box-shadow: var(--shadow);
-  user-select: text;
-}
-
-.file-card p {
-  margin: 5px 0;
-}
-
-.file-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  word-break: break-all;
-  font-weight: 600;
-}
-
-.file-card-head code {
-  font-size: 12px;
 }
 
 /* xterm owns its own text selection and cursor. */

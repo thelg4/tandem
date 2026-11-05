@@ -397,6 +397,39 @@ def cmd_usage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_edits(args: argparse.Namespace) -> int:
+    from tandem.live.edits import file_edits
+    from tandem.live.protocol import iso
+    from tandem.report.views import safe
+
+    top = _git_for(args.repo).discover().top_level
+    target = Path(args.file)
+    if target.is_absolute():
+        try:
+            target = target.resolve().relative_to(top)
+        except ValueError as exc:
+            raise InvalidInputError(f"{args.file} is not inside {top}") from exc
+    rel = target.as_posix()
+    claude, codex = _roots(args)
+    edits = file_edits(top, rel, claude, codex, days=args.days, limit=args.limit)
+    if args.format == "json":
+        print(json.dumps({"path": rel, "edits": [e.as_json() for e in edits]}))
+        return 0
+    if not edits:
+        print(f"No agent edits to {rel} in the last {args.days} days.")
+    for e in edits:
+        who = "Claude Code" if e.agent == "claude_code" else "Codex"
+        print(
+            f"{iso(e.at)}  {who}  {e.tool} ({e.change})" + (f"  {safe(e.title)}" if e.title else "")
+        )
+        for h in e.hunks:
+            where = f"@@ -{h.old_start} +{h.new_start} @@" if h.new_start is not None else "@@"
+            print(f"  {where}")
+            for line in h.lines:
+                print(f"  {safe(line)}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tandem",
@@ -478,6 +511,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
     p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
     p.set_defaults(func=cmd_projects)
+
+    p = sub.add_parser("edits", help="show each agent edit to one file, from the agents' logs")
+    p.add_argument("file", help="file path, relative to the repository or absolute")
+    p.add_argument("--repo", default=".", metavar="PATH", help="repository (default: .)")
+    p.add_argument("--days", type=int, default=7, help="look back this many days (default 7)")
+    p.add_argument("--limit", type=int, default=50, help="at most this many edits (default 50)")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_edits)
 
     p = sub.add_parser("usage", help="token usage today and this week, and Codex plan limits")
     p.add_argument("--format", choices=["text", "json"], default="text")
