@@ -334,6 +334,69 @@ def cmd_watch(args: argparse.Namespace) -> int:
     )
 
 
+def _roots(args: argparse.Namespace) -> tuple[Path, Path]:
+    claude, codex = resolve_roots(_opt_path(args.claude_root), _opt_path(args.codex_root))
+    return claude.path, codex.path
+
+
+def _home(path: str) -> str:
+    home = str(Path.home())
+    return "~" + path[len(home) :] if path == home or path.startswith(home + "/") else path
+
+
+def _count(n: int) -> str:
+    for unit, size in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
+        if n >= size:
+            return f"{n / size:.1f}{unit}"
+    return str(n)
+
+
+def cmd_projects(args: argparse.Namespace) -> int:
+    from tandem.live.projects import recent_projects
+
+    claude, codex = _roots(args)
+    projects = [p.as_json() for p in recent_projects(claude, codex, days=args.days)]
+    if args.format == "json":
+        print(json.dumps({"projects": projects}))
+        return 0
+    if not projects:
+        print(f"No agent sessions in a Git repository in the last {args.days} days.")
+    for p in projects:
+        sessions = p["sessions"]
+        assert isinstance(sessions, dict)
+        counts = ", ".join(f"{agent} {n}" for agent, n in sorted(sessions.items()))
+        print(f"{p['last_active']}  {_home(str(p['path']))}  ({counts})")
+    return 0
+
+
+def cmd_usage(args: argparse.Namespace) -> int:
+    from tandem.live.usage import usage_summary
+
+    claude, codex = _roots(args)
+    summary = usage_summary(claude, codex)
+    if args.format == "json":
+        print(json.dumps(summary))
+        return 0
+    for agent, name in (("claude_code", "Claude Code"), ("codex", "Codex")):
+        u = summary[agent]
+        assert isinstance(u, dict)
+        today, week = u["today"], u["week"]
+        print(
+            f"{name}: today {_count(today['output'])} out / {_count(today['input'])} in; "
+            f"7 days {_count(week['output'])} out / {_count(week['input'])} in"
+        )
+    codex_usage = summary["codex"]
+    assert isinstance(codex_usage, dict)
+    limits = codex_usage.get("limits")
+    if isinstance(limits, dict):
+        for key, label in (("primary", "Codex short window"), ("secondary", "Codex weekly")):
+            w = limits.get(key)
+            if isinstance(w, dict):
+                print(f"{label}: {w['used_percent']:.0f}% used, resets {w['resets_at']}")
+        print(f"  (as of {limits['at']})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tandem",
@@ -408,6 +471,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
     p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
     p.set_defaults(func=cmd_watch)
+
+    p = sub.add_parser("projects", help="list Git repositories where agent sessions ran recently")
+    p.add_argument("--days", type=int, default=60, help="look back this many days (default 60)")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_projects)
+
+    p = sub.add_parser("usage", help="token usage today and this week, and Codex plan limits")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_usage)
 
     return parser
 
