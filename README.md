@@ -122,7 +122,7 @@ Tandem reads logs from `~/.claude/projects` and `~/.codex/sessions`, honoring `C
 
 ## Live workspace (experimental)
 
-A desktop app that runs the real `claude` and `codex` CLIs in terminal panes. Next to them is a live map of the repository that lights up as each agent reads and edits files. When two sessions edit the same file within two minutes of each other, you get a warning before one overwrites the other.
+A desktop app that runs the real `claude` and `codex` CLIs in terminal panes. Next to them is a live view of the repository that shows each file as an agent reads or edits it, with the diffs of those edits. When two sessions edit the same file within two minutes of each other, you get a warning before one overwrites the other.
 
 ```sh
 pip install -e .                  # the app runs `python3 -m tandem watch`
@@ -130,7 +130,7 @@ cd app && npm install
 TANDEM_REPO=/path/to/repo npm run dev
 ```
 
-To build a standalone app, run `npm run dist` in `app/`. On macOS that makes `dist/Tandem-<version>-arm64.dmg` and a zipped `Tandem.app`. On Linux it makes an AppImage. The app carries its own copy of the watcher, so it only needs Python 3.11+ as `python3` on your login `PATH`. Opened without `--repo` or `TANDEM_REPO`, it asks for a repository. The build is unsigned, so on macOS open it the first time with right-click → Open.
+To build a standalone app, run `npm run dist` in `app/`. On macOS that makes `dist/Tandem-<version>-arm64.dmg` and a zipped `Tandem.app`. On Linux it makes an AppImage. The app carries its own copy of the watcher, so it only needs Python 3.11+ as `python3` on your login `PATH`. Opened without `--repo` or `TANDEM_REPO`, it shows your recent projects. The build is unsigned, so on macOS open it the first time with right-click → Open.
 
 The app follows Apple's design language and the system's light or dark appearance. On macOS the title bar folds into the toolbar, the window is translucent and selection uses your accent color. On Linux it uses a normal window frame and solid backgrounds. Linux builds are untested so far.
 
@@ -141,14 +141,14 @@ The app follows Apple's design language and the system's light or dark appearanc
 - **Usage.** The toolbar shows Claude Code's output tokens today and Codex's fullest plan limit. Click for details: tokens today and over 7 days for both agents, plus Codex's short-window and weekly limits with reset times. Claude Code's logs don't record plan limits, so for Claude only tokens are shown. Codex limits are as of its last session on this computer. `tandem usage` prints the same summary.
 - **Outside the app.** Claude Code and Codex sessions started elsewhere, such as Codex Desktop or an iTerm window, show on the map too, as long as their working directory is in this worktree.
 - **Settings.** `TANDEM_PYTHON` sets the interpreter (default: `python3` on your login `PATH`). `TANDEM_CODEX_BIN` sets the Codex binary (default: `codex` on your login `PATH`, then the copy bundled in ChatGPT.app). `TANDEM_CLAUDE_BIN` sets the Claude binary.
-- **Privacy.** `tandem watch` follows the same rules as `scan`. It reads logs and Git read-only and makes no network requests. No prompt text, diffs or command text leave the watcher. Diffs and file contents are read only when you open a file, on your machine, and the app only reads files inside the open repository. The app loads nothing remote.
+- **Privacy.** `tandem watch` follows the same rules as `scan`. It reads logs and Git read-only and makes no network requests. No prompt text, diffs or command text leave the watcher. Diffs and file contents are read only when you open a file, on your machine, and the app only reads files inside the open repository. The list of projects you opened is kept in the app's data directory (mode 0600). The app loads nothing remote.
 - **Limits.** Reads done through shell commands (`cat`, `grep`) are invisible. Edits made through shell commands appear only as grey "changed" cells. "Needs you" is a heuristic: an open tool call with no terminal output for 1.5 s, or a terminal bell.
 
 ## Privacy
 
 - Results live in a private SQLite database (mode 0600) in your user data directory, outside the repository. It holds diffs of your code and is not encrypted, so treat it as private.
 - Log content is untrusted data. Nothing in it is executed, and terminal control characters are escaped before printing.
-- `report --format json` leaves out prompts and diffs. `explain` and `session` include code from the diffs. Home directories are always written as `~`. `tandem audit` prints structure and counts only.
+- `report --format json` leaves out prompts and diffs. `explain`, `session` and `edits` include code from the diffs. Home directories are always written as `~`. `tandem audit` prints structure and counts only.
 
 ## Limitations
 
