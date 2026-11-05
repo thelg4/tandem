@@ -60,4 +60,51 @@ export const AGENT_NAMES: Record<Agent, string> = {
   codex: 'Codex',
 }
 
-export type MenuEvent = { kind: 'new-pane'; agent: Agent } | { kind: 'close-pane' }
+export type MenuEvent = { kind: 'new-pane'; agent: Agent } | { kind: 'close-pane' } | { kind: 'show-projects' }
+
+/** A repository for the project picker. */
+export interface ProjectEntry {
+  path: string
+  name: string
+  /** Latest agent session in the logs (ISO), if any. */
+  lastActive: string | null
+  /** Agent sessions seen in the logs over the look-back window. */
+  sessions: Partial<Record<Agent, number>>
+  /** Last opened in this app (ISO), if ever. */
+  opened: string | null
+}
+
+export interface ProjectList {
+  projects: ProjectEntry[]
+  home: string
+  /** False when `tandem projects` could not run (for example, no Python 3.11+). */
+  logsRead: boolean
+}
+
+export type OpenResult = { ok: true } | { ok: false; canceled?: boolean; error?: string }
+
+export interface TokenCounts {
+  input: number
+  output: number
+}
+
+export interface LimitWindow {
+  used_percent: number
+  window_minutes: number | null
+  resets_at: string | null
+}
+
+export interface AgentUsage {
+  today: TokenCounts
+  week: TokenCounts
+  last_at: string | null
+}
+
+/** Output of `tandem usage --format json`. */
+export interface UsageSummary {
+  at: string
+  claude_code: AgentUsage
+  codex: AgentUsage & {
+    limits: { primary: LimitWindow | null; secondary: LimitWindow | null; plan: string | null; at: string } | null
+  }
+}

@@ -24,7 +24,7 @@ function useNow(fast: boolean): number {
   return now
 }
 
-export function App(): JSX.Element {
+export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Element {
   const [state, dispatch] = useReducer(reduce, initialState)
   const [split, setSplit] = useState(0.55)
   const focused = useRef<string | null>(null)
@@ -55,7 +55,7 @@ export function App(): JSX.Element {
       window.tandem.onPaneExit((paneId, code) => dispatch({ type: 'pane_exited', paneId, code })),
       window.tandem.onMenu((event) => {
         if (event.kind === 'new-pane') void addPane(event.agent)
-        else {
+        else if (event.kind === 'close-pane') {
           const target = focused.current ?? panesRef.current.at(-1)?.paneId
           if (target) closePane(target)
         }
@@ -120,6 +120,7 @@ export function App(): JSX.Element {
         diagnostics={state.diagnostics}
         onAdd={onAdd}
         onToggleCalm={onToggleCalm}
+        onShowProjects={onShowProjects}
       />
       <main className="workspace">
         <section className="left" style={{ flexBasis: `${split * 100}%` }}>

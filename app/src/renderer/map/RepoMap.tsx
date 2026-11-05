@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { cellVisual, type CellVisual } from '../state/selectors'
 import type { AppState } from '../state/store'
+import { ActivityList } from './ActivityList'
 import { FileCard } from './FileCard'
 import { buildLevel, layout, type MapNode, type Rect } from './tree'
 
@@ -77,6 +78,7 @@ interface Props {
 }
 
 export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element {
+  const [view, setView] = useState<'activity' | 'map'>('activity')
   const [dir, setDir] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -96,17 +98,32 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
 
   return (
     <div className="map">
-      <div className="crumbs">
-        <button onClick={() => setDir('')}>{state.repoRoot?.split('/').pop() ?? 'repo'}</button>
-        {crumbs.map((c, i) => (
-          <span key={i}>
-            {' / '}
-            <button onClick={() => setDir(crumbs.slice(0, i + 1).join('/'))}>{c}</button>
-          </span>
-        ))}
-        {state.treeTruncated && <span className="muted"> · tree truncated</span>}
+      <div className="map-head">
+        <div className="segmented small" role="tablist" aria-label="File view">
+          <button role="tab" aria-selected={view === 'activity'} className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>
+            Activity
+          </button>
+          <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => setView('map')}>
+            Map
+          </button>
+        </div>
+        {view === 'map' && (
+          <div className="crumbs">
+            <button onClick={() => setDir('')}>{state.repoRoot?.split('/').pop() ?? 'repo'}</button>
+            {crumbs.map((c, i) => (
+              <span key={i}>
+                {' / '}
+                <button onClick={() => setDir(crumbs.slice(0, i + 1).join('/'))}>{c}</button>
+              </span>
+            ))}
+            {state.treeTruncated && <span className="muted"> · tree truncated</span>}
+          </div>
+        )}
       </div>
-      <div className="map-area" ref={box}>
+      {view === 'activity' && (
+        <ActivityList state={state} now={now} selected={selected} onSelect={setSelected} />
+      )}
+      <div className="map-area" ref={box} hidden={view !== 'map'}>
         {rects.map((r) => {
           const v = r.node.isDir ? dirVisual(state, r.node, now) : cellVisual(state, r.node.path, now)
           if (!r.leaf) {
