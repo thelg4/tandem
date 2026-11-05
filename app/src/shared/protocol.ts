@@ -81,6 +81,33 @@ export interface ProjectList {
   logsRead: boolean
 }
 
+export type FileContents =
+  | { kind: 'text'; text: string; size: number }
+  | { kind: 'binary'; size: number }
+  | { kind: 'too_large'; size: number }
+  | { kind: 'missing' }
+
+export interface EditHunk {
+  /** Null for Codex patch text, which carries no line numbers. */
+  old_start: number | null
+  new_start: number | null
+  /** Each line starts with ' ', '-' or '+'. */
+  lines: string[]
+}
+
+/** One successful agent edit to a file, from `tandem edits --format json`. */
+export interface FileEdit {
+  agent: Agent
+  session_id: string
+  title: string | null
+  at: string
+  tool: string
+  change: 'update' | 'create' | 'delete'
+  user_modified: boolean
+  truncated: boolean
+  hunks: EditHunk[]
+}
+
 export type OpenResult = { ok: true } | { ok: false; canceled?: boolean; error?: string }
 
 export interface TokenCounts {

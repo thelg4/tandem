@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from '
 import { cellVisual, type CellVisual } from '../state/selectors'
 import type { AppState } from '../state/store'
 import { ActivityList } from './ActivityList'
-import { FileCard } from './FileCard'
+import { FileView } from './FileView'
 import { buildLevel, layout, type MapNode, type Rect } from './tree'
 
 // Theme colors from styles.css, so cells follow light and dark appearance.
@@ -81,6 +81,11 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
   const [view, setView] = useState<'activity' | 'map'>('activity')
   const [dir, setDir] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [openPath, setOpenPath] = useState<string | null>(null)
+  const openFile = (path: string): void => {
+    setSelected(path)
+    setOpenPath(path)
+  }
   const [size, setSize] = useState({ w: 0, h: 0 })
   const box = useRef<HTMLDivElement>(null)
 
@@ -98,7 +103,8 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
 
   return (
     <div className="map">
-      <div className="map-head">
+      {openPath && <FileView state={state} path={openPath} now={now} onBack={() => setOpenPath(null)} />}
+      <div className="map-head" hidden={openPath !== null}>
         <div className="segmented small" role="tablist" aria-label="File view">
           <button role="tab" aria-selected={view === 'activity'} className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>
             Activity
@@ -120,10 +126,10 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
           </div>
         )}
       </div>
-      {view === 'activity' && (
-        <ActivityList state={state} now={now} selected={selected} onSelect={setSelected} />
+      {view === 'activity' && !openPath && (
+        <ActivityList state={state} now={now} selected={selected} onSelect={openFile} />
       )}
-      <div className="map-area" ref={box} hidden={view !== 'map'}>
+      <div className="map-area" ref={box} hidden={view !== 'map' || openPath !== null}>
         {rects.map((r) => {
           const v = r.node.isDir ? dirVisual(state, r.node, now) : cellVisual(state, r.node.path, now)
           if (!r.leaf) {
@@ -144,7 +150,7 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
               className={`cell ${r.node.isDir ? 'dir' : ''} ${v.overlap === 'active' ? 'pulse-red' : ''} ${selected === r.node.path ? 'selected' : ''}`}
               style={cellStyle(r, v)}
               title={[r.node.path + (r.node.isDir ? '/' : ''), ...lines].join('\n')}
-              onClick={() => (r.node.isDir ? setDir(r.node.path) : setSelected(r.node.path))}
+              onClick={() => (r.node.isDir ? setDir(r.node.path) : openFile(r.node.path))}
             >
               {r.w > 36 && r.h > 15 && <span className="cell-label">{r.node.name}{r.node.isDir ? '/' : ''}</span>}
               {r.node.isDir && r.w > 120 && r.h > 50 && (
@@ -155,7 +161,6 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
         })}
         {state.tree.length === 0 && <div className="empty">Waiting for the repository tree…</div>}
       </div>
-      {selected && <FileCard state={state} path={selected} now={now} onClose={() => setSelected(null)} />}
     </div>
   )
 })

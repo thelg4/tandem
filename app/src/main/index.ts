@@ -14,7 +14,8 @@ import {
   type BrowserWindowConstructorOptions,
   type MenuItemConstructorOptions,
 } from 'electron'
-import type { Agent, MenuEvent, OpenResult, ProjectEntry, ProjectList } from '../shared/protocol'
+import type { Agent, FileContents, FileEdit, MenuEvent, OpenResult, ProjectEntry, ProjectList } from '../shared/protocol'
+import { readRepoFile } from './files'
 import { PaneManager } from './panes'
 import { runTandemJson } from './python'
 import { WatcherBridge } from './watcher'
@@ -276,6 +277,15 @@ function registerIpc(): void {
     if (!gitTopLevel(path)) return { ok: false, error: 'That folder is not inside a Git repository.' }
     if (!(await confirmLeave())) return { ok: false, canceled: true }
     return openRepo(path) ? { ok: true } : { ok: false, error: 'That folder is not inside a Git repository.' }
+  })
+  // File contents and edit diffs load only when the user opens a file, never in the stream.
+  ipcMain.handle('file:read', (_e, rel: string): Promise<FileContents> =>
+    repoRoot ? readRepoFile(repoRoot, rel).catch(() => ({ kind: 'missing' }) as const) : Promise.resolve({ kind: 'missing' }),
+  )
+  ipcMain.handle('file:edits', async (_e, rel: string): Promise<FileEdit[] | null> => {
+    if (!repoRoot || typeof rel !== 'string' || !rel) return null
+    const out = await runTandemJson<{ edits: FileEdit[] }>(app.getAppPath(), ['edits', rel, '--repo', repoRoot])
+    return out?.edits ?? null
   })
   ipcMain.handle('usage', () => {
     if (Date.now() - usageAt > 15_000) void refreshUsage()
