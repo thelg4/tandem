@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { AGENT_COLORS, type Agent } from '../shared/protocol'
+import { AGENT_COLORS, AGENT_NAMES, type Agent } from '../shared/protocol'
 import { Banner, sessionNames } from './components/Banner'
 import { ExternalList } from './components/ExternalList'
 import { PaneStack } from './components/PaneStack'
-import type { PaneHeader } from './components/TerminalPane'
+import { focusPane, type PaneHeader } from './components/TerminalPane'
 import { Toolbar } from './components/Toolbar'
 import { RepoMap } from './map/RepoMap'
 import { shortcut } from './platform'
+import { paneNotices, type PaneMemory } from './state/notify'
 import { forgetPane, getAct } from './state/paneActivity'
 import { forgetPaneData, installPaneDataListener } from './state/paneData'
 import { hasLiveDecay, paneSession, paneStatus, reuseUnchanged } from './state/selectors'
@@ -27,6 +28,7 @@ function useNow(fast: boolean): number {
 export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Element {
   const [state, dispatch] = useReducer(reduce, initialState)
   const [split, setSplit] = useState(0.55)
+  const [timeline, setTimeline] = useState<string | null>(null)
   const focused = useRef<string | null>(null)
   const panesRef = useRef(state.panes)
   panesRef.current = state.panes
@@ -55,7 +57,9 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
       window.tandem.onPaneExit((paneId, code) => dispatch({ type: 'pane_exited', paneId, code })),
       window.tandem.onMenu((event) => {
         if (event.kind === 'new-pane') void addPane(event.agent)
-        else if (event.kind === 'close-pane') {
+        else if (event.kind === 'focus-pane') {
+          if (focusPane(event.paneId)) focused.current = event.paneId
+        } else if (event.kind === 'close-pane') {
           const target = focused.current ?? panesRef.current.at(-1)?.paneId
           if (target) closePane(target)
         }
@@ -85,6 +89,8 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
       out[p.paneId] = {
         status: paneStatus(state, p.paneId, now, getAct(p.paneId)),
         title: s?.title ?? null,
+        sessionId: s?.id ?? null,
+        files: s ? new Set(s.timeline.map((e) => e.path)).size : 0,
         currentFile: fresh ? { path: fresh.path, kind: fresh.kind } : null,
         overlap: overlapEntry
           ? { path: overlapEntry[0], others: sessionNames(state, overlapEntry[1].sessions.filter((id) => id !== s!.id)) }
@@ -95,6 +101,39 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
     return prevHeaders.current
   }, [state, now])
 
+  // System notifications and the Dock badge follow the pane headers. The main process
+  // drops notifications while Tandem is the focused window.
+  const noticeMemory = useRef<Record<string, PaneMemory>>({})
+  const badge = useRef(0)
+  const panesNow = state.panes
+  useEffect(() => {
+    const statuses = Object.fromEntries(Object.entries(headers).map(([id, h]) => [id, h.status]))
+    const { memory, notices } = paneNotices(noticeMemory.current, statuses, Date.now())
+    noticeMemory.current = memory
+    for (const n of notices) {
+      const pane = panesNow.find((p) => p.paneId === n.paneId)
+      const h = headers[n.paneId]
+      if (!pane || !h) continue
+      const name = AGENT_NAMES[pane.agent]
+      if (n.reason === 'waiting') {
+        window.tandem.notify({
+          paneId: n.paneId,
+          title: `${name} needs you`,
+          body: h.title ? `${h.title}\nWaiting for your approval or input.` : 'Waiting for your approval or input.',
+        })
+      } else {
+        window.tandem.notify({ paneId: n.paneId, title: `${name} finished`, body: h.title ?? 'Ready for your next prompt.' })
+      }
+    }
+    const waiting = Object.values(statuses).filter((st) => st === 'waiting').length
+    if (waiting !== badge.current) {
+      badge.current = waiting
+      window.tandem.setBadge(waiting)
+    }
+  }, [headers, panesNow])
+
+  const onTimeline = useCallback((sessionId: string) => setTimeline(sessionId), [])
+  const onCloseTimeline = useCallback(() => setTimeline(null), [])
   const onAdd = useCallback((agent: Agent) => void addPane(agent), [addPane])
   const onToggleCalm = useCallback(() => dispatch({ type: 'toggle_calm' }), [])
   const onFocus = useCallback((id: string) => {
@@ -149,6 +188,7 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
               onFocus={onFocus}
               onClose={closePane}
               onRestart={restartPane}
+              onTimeline={onTimeline}
             />
           )}
         </section>
@@ -156,7 +196,7 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
         <section className="right">
           <Banner state={state} />
           <ExternalList state={state} />
-          <RepoMap state={state} now={mapNow} />
+          <RepoMap state={state} now={mapNow} session={timeline} onCloseSession={onCloseTimeline} />
         </section>
       </main>
     </div>

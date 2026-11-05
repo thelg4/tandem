@@ -8,11 +8,12 @@ interface Props {
   onFocus: (paneId: string) => void
   onClose: (paneId: string) => void
   onRestart: (paneId: string) => void
+  onTimeline: (sessionId: string) => void
 }
 
 const MIN_PX = 120
 
-export const PaneStack = memo(function PaneStack({ panes, headers, onFocus, onClose, onRestart }: Props): JSX.Element {
+export const PaneStack = memo(function PaneStack({ panes, headers, onFocus, onClose, onRestart, onTimeline }: Props): JSX.Element {
   const [weights, setWeights] = useState<Record<string, number>>({})
   const box = useRef<HTMLDivElement>(null)
 
@@ -54,6 +55,7 @@ export const PaneStack = memo(function PaneStack({ panes, headers, onFocus, onCl
               onFocus={onFocus}
               onClose={onClose}
               onRestart={onRestart}
+              onTimeline={onTimeline}
             />
           </div>
           {i < panes.length - 1 && <div className="divider-h" onPointerDown={startDrag(i)} />}

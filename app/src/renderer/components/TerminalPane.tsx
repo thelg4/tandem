@@ -12,6 +12,9 @@ import type { PaneStatus } from '../state/selectors'
 export interface PaneHeader {
   status: PaneStatus
   title: string | null
+  /** The pane's current session and how many files it has touched, for the timeline chip. */
+  sessionId: string | null
+  files: number
   currentFile: { path: string; kind: 'read' | 'edit' } | null
   overlap: { path: string; others: string } | null
 }
@@ -24,6 +27,16 @@ interface Props {
   onFocus: (paneId: string) => void
   onClose: (paneId: string) => void
   onRestart: (paneId: string) => void
+  onTimeline: (sessionId: string) => void
+}
+
+// Terminals register here so a notification click can put the cursor in its pane.
+const focusers = new Map<string, () => void>()
+
+export function focusPane(paneId: string): boolean {
+  const f = focusers.get(paneId)
+  f?.()
+  return f !== undefined
 }
 
 const STATUS_TEXT: Record<PaneStatus, string> = {
@@ -34,7 +47,16 @@ const STATUS_TEXT: Record<PaneStatus, string> = {
   starting: 'starting',
 }
 
-export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, header, onFocus, onClose, onRestart }: Props): JSX.Element {
+export const TerminalPane = memo(function TerminalPane({
+  paneId,
+  agent,
+  exited,
+  header,
+  onFocus,
+  onClose,
+  onRestart,
+  onTimeline,
+}: Props): JSX.Element {
   const host = useRef<HTMLDivElement>(null)
   const exitedRef = useRef(exited)
   exitedRef.current = exited
@@ -94,8 +116,10 @@ export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, 
     observer.observe(el)
     const focus = (): void => onFocus(paneId)
     term.textarea?.addEventListener('focus', focus)
+    focusers.set(paneId, () => term.focus())
     term.focus()
     return () => {
+      focusers.delete(paneId)
       observer.disconnect()
       cancelAnimationFrame(frame)
       term.textarea?.removeEventListener('focus', focus)
@@ -110,7 +134,7 @@ export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, 
   }, [paneId, agent])
 
   const color = AGENT_COLORS[agent]
-  const { status, title, currentFile, overlap } = header
+  const { status, title, currentFile, overlap, sessionId, files } = header
   return (
     <div className={`pane ${overlap ? 'pane-overlap' : ''}`} style={{ ['--agent' as string]: color }}>
       <div className="pane-header">
@@ -127,6 +151,16 @@ export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, 
           <span className="pane-file overlap-text">
             {overlap.others} also editing {overlap.path}
           </span>
+        )}
+        {sessionId && files > 0 && (
+          <button
+            className={`pane-files ${currentFile || overlap ? '' : 'push-right'}`}
+            title="Show the files this session read and edited"
+            onClick={() => onTimeline(sessionId)}
+          >
+            <Icon name="list" size={12} />
+            {files} {files === 1 ? 'file' : 'files'}
+          </button>
         )}
         <button className="pane-close" title={`Close pane (${shortcut('W')})`} onClick={() => onClose(paneId)}>
           <Icon name="xmark" size={12} />
