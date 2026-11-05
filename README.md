@@ -130,10 +130,14 @@ cd app && npm install
 TANDEM_REPO=/path/to/repo npm run dev
 ```
 
-- **Panes.** `⌘T` opens a Claude pane and `⇧⌘T` a Codex pane. Each pane is the agent itself, running in your login shell with the repository as its working directory. Type into it exactly as you would in a terminal. A pane follows its agent across `/clear`, `/resume` and `/new`.
+To build a standalone app, run `npm run dist` in `app/`. On macOS that makes `dist/Tandem-<version>-arm64.dmg` and a zipped `Tandem.app`. On Linux it makes an AppImage. The app carries its own copy of the watcher, so it only needs Python 3.11+ as `python3` on your login `PATH`. Opened without `--repo` or `TANDEM_REPO`, it asks for a repository. The build is unsigned, so on macOS open it the first time with right-click → Open.
+
+The app follows Apple's design language and the system's light or dark appearance. On macOS the title bar folds into the toolbar, the window is translucent and selection uses your accent color. On Linux it uses a normal window frame and solid backgrounds. Linux builds are untested so far.
+
+- **Panes.** `⌘T` opens a Claude pane and `⇧⌘T` a Codex pane (`Ctrl+T` and `Ctrl+Shift+T` on Linux). Each pane is the agent itself, running in your login shell with the repository as its working directory. Type into it exactly as you would in a terminal. A pane follows its agent across `/clear`, `/resume` and `/new`.
 - **Map.** Agent colors: orange for Claude, green for Codex. A fill marks an edit and fades over 90 s to a faint tint. An outline marks a read and fades over 20 s. Amber means two sessions edited the file in the last 15 minutes. A red pulse plus the banner means they edited it within 2 minutes of each other. Grey hatching marks a change that no tool call explains, for example one made by a shell command. **Calm** turns the pulses into static colors.
 - **Outside the app.** Claude Code and Codex sessions started elsewhere, such as Codex Desktop or an iTerm window, show on the map too, as long as their working directory is in this worktree.
-- **Settings.** `TANDEM_PYTHON` sets the interpreter (default `python3`). `TANDEM_CODEX_BIN` sets the Codex binary (default: `codex` on your login `PATH`, then the copy bundled in ChatGPT.app). `TANDEM_CLAUDE_BIN` sets the Claude binary.
+- **Settings.** `TANDEM_PYTHON` sets the interpreter (default: `python3` on your login `PATH`). `TANDEM_CODEX_BIN` sets the Codex binary (default: `codex` on your login `PATH`, then the copy bundled in ChatGPT.app). `TANDEM_CLAUDE_BIN` sets the Claude binary.
 - **Privacy.** `tandem watch` follows the same rules as `scan`. It reads logs and Git read-only and makes no network requests. No prompt text, diffs or command text leave the watcher. The app loads nothing remote.
 - **Limits.** Reads done through shell commands (`cat`, `grep`) are invisible. Edits made through shell commands appear only as grey "changed" cells. "Needs you" is a heuristic: an open tool call with no terminal output for 1.5 s, or a terminal bell.
 
