@@ -1,4 +1,14 @@
-import type { Agent, FileContents, FileEdit, MenuEvent, OpenResult, ProjectList, UsageSummary, WatcherMsg } from '../shared/protocol'
+import type {
+  Agent,
+  FileContents,
+  FileEdit,
+  MenuEvent,
+  OpenResult,
+  PaneNotice,
+  ProjectList,
+  UsageSummary,
+  WatcherMsg,
+} from '../shared/protocol'
 
 export interface TandemBridge {
   /** The OS, for platform-specific chrome: darwin gets the inset title bar and vibrancy. */
@@ -20,6 +30,10 @@ export interface TandemBridge {
   readFile(rel: string): Promise<FileContents>
   /** Successful agent edits to a file from the logs, newest first; null if unavailable. */
   fileEdits(rel: string): Promise<FileEdit[] | null>
+  /** Show a system notification unless Tandem is focused or notifications are off. */
+  notify(notice: PaneNotice): void
+  /** Panes waiting on the user, for the Dock badge; 0 clears it. */
+  setBadge(count: number): void
   /** Start the watcher once the renderer is listening, so no early message is lost. */
   ready(): void
   createPane(agent: Agent): Promise<{ paneId: string }>

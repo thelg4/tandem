@@ -7,6 +7,7 @@ import {
   Menu,
   app,
   dialog,
+  Notification,
   ipcMain,
   nativeTheme,
   shell,
@@ -14,7 +15,7 @@ import {
   type BrowserWindowConstructorOptions,
   type MenuItemConstructorOptions,
 } from 'electron'
-import type { Agent, FileContents, FileEdit, MenuEvent, OpenResult, ProjectEntry, ProjectList } from '../shared/protocol'
+import type { Agent, FileContents, FileEdit, MenuEvent, OpenResult, PaneNotice, ProjectEntry, ProjectList } from '../shared/protocol'
 import { readRepoFile } from './files'
 import { PaneManager } from './panes'
 import { runTandemJson } from './python'
@@ -46,6 +47,64 @@ function sendMenu(event: MenuEvent): void {
   win?.webContents.send('menu', event)
 }
 
+interface Settings {
+  notifications: boolean
+}
+
+function settingsPath(): string {
+  return join(app.getPath('userData'), 'settings.json')
+}
+
+function readSettings(): Settings {
+  try {
+    const raw = JSON.parse(readFileSync(settingsPath(), 'utf8')) as Partial<Settings>
+    return { notifications: raw.notifications !== false }
+  } catch {
+    return { notifications: true }
+  }
+}
+
+let settings: Settings = { notifications: true }
+
+function saveSettings(): void {
+  try {
+    writeFileSync(settingsPath(), JSON.stringify(settings), { mode: 0o600 })
+  } catch (err) {
+    console.error(`[settings] ${(err as Error).message}`)
+  }
+}
+
+// Shown notifications are kept referenced, or their click handlers can be collected.
+const notices = new Map<string, Notification>()
+
+function notify(notice: PaneNotice): void {
+  if (!settings.notifications || !win || win.isFocused() || !Notification.isSupported()) return
+  notices.get(notice.paneId)?.close()
+  const n = new Notification({
+    title: notice.title,
+    subtitle: repoRoot ? basename(repoRoot) : undefined,
+    body: notice.body,
+  })
+  n.on('click', () => {
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    }
+    sendMenu({ kind: 'focus-pane', paneId: notice.paneId })
+  })
+  n.on('close', () => {
+    if (notices.get(notice.paneId) === n) notices.delete(notice.paneId)
+  })
+  notices.set(notice.paneId, n)
+  n.show()
+}
+
+function clearNotices(): void {
+  for (const n of notices.values()) n.close()
+  notices.clear()
+}
+
 function buildMenu(): void {
   const newPane = (agent: Agent) => () => sendMenu({ kind: 'new-pane', agent })
   const mac = process.platform === 'darwin'
@@ -64,6 +123,17 @@ function buildMenu(): void {
         { label: 'New Claude pane', accelerator: 'CmdOrCtrl+T', click: newPane('claude_code') },
         { label: 'New Codex pane', accelerator: 'CmdOrCtrl+Shift+T', click: newPane('codex') },
         { label: 'Close pane', accelerator: 'CmdOrCtrl+W', click: () => sendMenu({ kind: 'close-pane' }) },
+        { type: 'separator' },
+        {
+          label: 'Notify When an Agent Needs You',
+          type: 'checkbox',
+          checked: settings.notifications,
+          click: (item) => {
+            settings = { ...settings, notifications: item.checked }
+            saveSettings()
+            if (!item.checked) clearNotices()
+          },
+        },
       ],
     },
     {
@@ -128,6 +198,7 @@ function createWindow(): void {
   }
   // The accent color can change in System Settings while the app runs.
   win.on('focus', () => {
+    clearNotices()
     win?.webContents.send('accent', accentColor())
     if (Date.now() - usageAt > 15_000) void refreshUsage()
   })
@@ -194,6 +265,8 @@ function openRepo(path: string): boolean {
   if (!top) return false
   panes?.killAll()
   watcher?.stop()
+  clearNotices()
+  app.setBadgeCount(0)
   repoRoot = top
   started = false
   watcher = new WatcherBridge(
@@ -298,9 +371,17 @@ function registerIpc(): void {
     panes?.resize(paneId, cols, rows),
   )
   ipcMain.on('pane:kill', (_e, paneId: string) => panes?.kill(paneId))
+  ipcMain.on('notify', (_e, notice: PaneNotice) => {
+    if (notice && typeof notice.paneId === 'string' && typeof notice.title === 'string') notify(notice)
+  })
+  ipcMain.on('badge', (_e, count: number) => {
+    // macOS Dock and Unity launchers; elsewhere this is a no-op.
+    app.setBadgeCount(Number.isInteger(count) && count > 0 ? count : 0)
+  })
 }
 
 app.whenReady().then(() => {
+  settings = readSettings()
   buildMenu()
   registerIpc()
   // Open a repository given on the command line before the window loads, so its first

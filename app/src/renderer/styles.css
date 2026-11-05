@@ -519,6 +519,28 @@ h2 {
   margin-left: 2px;
 }
 
+.pane-files {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0 7px;
+  border-radius: 5px;
+  color: var(--secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pane-files.push-right {
+  margin-left: auto;
+}
+
+.pane-files:hover {
+  background: var(--hover);
+  color: var(--label);
+}
+
 .pane-close:hover,
 .banner-row button:hover {
   background: var(--hover);
@@ -1529,4 +1551,32 @@ html:not([data-platform='darwin']) .map {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Session timeline ------------------------------------------------------------------ */
+
+.timeline {
+  padding-top: 6px;
+}
+
+.timeline-kind {
+  display: inline-flex;
+  width: 15px;
+  justify-content: center;
+  color: var(--tertiary);
+}
+
+.timeline-row.tl-edit .timeline-kind {
+  color: var(--label);
+}
+
+.timeline-row.tl-read .activity-name {
+  font-weight: 400;
+  color: var(--secondary);
+}
+
+.timeline-sub {
+  font-size: 11px;
+  color: var(--secondary);
+  font-variant-numeric: tabular-nums;
 }

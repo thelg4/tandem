@@ -3,6 +3,7 @@ import { cellVisual, type CellVisual } from '../state/selectors'
 import type { AppState } from '../state/store'
 import { ActivityList } from './ActivityList'
 import { FileView } from './FileView'
+import { SessionTimeline } from './SessionTimeline'
 import { buildLevel, layout, type MapNode, type Rect } from './tree'
 
 // Theme colors from styles.css, so cells follow light and dark appearance.
@@ -75,9 +76,12 @@ export function touchLines(state: AppState, path: string, now: number): string[]
 interface Props {
   state: AppState
   now: number
+  /** A session whose timeline replaces the list, or null. */
+  session: string | null
+  onCloseSession: () => void
 }
 
-export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element {
+export const RepoMap = memo(function RepoMap({ state, now, session, onCloseSession }: Props): JSX.Element {
   const [view, setView] = useState<'activity' | 'map'>('activity')
   const [dir, setDir] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
@@ -86,6 +90,8 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
     setSelected(path)
     setOpenPath(path)
   }
+  // A newly chosen timeline comes to the front, over any open file.
+  useEffect(() => setOpenPath(null), [session])
   const [size, setSize] = useState({ w: 0, h: 0 })
   const box = useRef<HTMLDivElement>(null)
 
@@ -104,7 +110,10 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
   return (
     <div className="map">
       {openPath && <FileView state={state} path={openPath} now={now} onBack={() => setOpenPath(null)} />}
-      <div className="map-head" hidden={openPath !== null}>
+      {session && !openPath && (
+        <SessionTimeline state={state} sessionId={session} now={now} selected={selected} onOpen={openFile} onBack={onCloseSession} />
+      )}
+      <div className="map-head" hidden={openPath !== null || session !== null}>
         <div className="segmented small" role="tablist" aria-label="File view">
           <button role="tab" aria-selected={view === 'activity'} className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>
             Activity
@@ -126,10 +135,10 @@ export const RepoMap = memo(function RepoMap({ state, now }: Props): JSX.Element
           </div>
         )}
       </div>
-      {view === 'activity' && !openPath && (
+      {view === 'activity' && !openPath && !session && (
         <ActivityList state={state} now={now} selected={selected} onSelect={openFile} />
       )}
-      <div className="map-area" ref={box} hidden={view !== 'map' || openPath !== null}>
+      <div className="map-area" ref={box} hidden={view !== 'map' || openPath !== null || session !== null}>
         {rects.map((r) => {
           const v = r.node.isDir ? dirVisual(state, r.node, now) : cellVisual(state, r.node.path, now)
           if (!r.leaf) {

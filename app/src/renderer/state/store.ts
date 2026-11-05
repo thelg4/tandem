@@ -19,6 +19,19 @@ export interface SessionView {
   pending: boolean
   currentFile?: { path: string; kind: 'read' | 'edit'; at: number }
   touched: string[]
+  /** What the session read and edited, oldest first; repeats in a row are merged. */
+  timeline: TimelineEntry[]
+}
+
+export interface TimelineEntry {
+  path: string
+  kind: 'read' | 'edit'
+  /** First and last touch of this run, as epoch milliseconds. */
+  first: number
+  at: number
+  count: number
+  /** The tool call last counted, so a call reported twice counts once. */
+  lastId: string
 }
 
 /** Last touch per session, as epoch milliseconds of the record time. */
@@ -76,6 +89,28 @@ export const initialState: AppState = {
 }
 
 const MAX_TOUCHED = 200
+export const MAX_TIMELINE = 500
+
+/** Append touches, merging into the previous entry when it is the same file and kind. */
+export function extendTimeline(
+  timeline: TimelineEntry[],
+  paths: string[],
+  kind: 'read' | 'edit',
+  at: number,
+  id: string,
+): TimelineEntry[] {
+  const out = timeline.slice()
+  for (const path of paths) {
+    const last = out.at(-1)
+    if (last && last.path === path && last.kind === kind) {
+      const repeat = id !== '' && id === last.lastId
+      out[out.length - 1] = { ...last, at: Math.max(last.at, at), count: last.count + (repeat ? 0 : 1), lastId: id }
+    } else {
+      out.push({ path, kind, first: at, at, count: 1, lastId: id })
+    }
+  }
+  return out.length > MAX_TIMELINE ? out.slice(-MAX_TIMELINE) : out
+}
 
 function mapPane(state: AppState, paneId: string, f: (p: Pane) => Pane): AppState {
   return { ...state, panes: state.panes.map((p) => (p.paneId === paneId ? f(p) : p)) }
@@ -101,6 +136,7 @@ function onWatcher(state: AppState, msg: WatcherMsg): AppState {
         pending: prev?.pending ?? false,
         currentFile: prev?.currentFile,
         touched: prev?.touched ?? [],
+        timeline: prev?.timeline ?? [],
       }
       return { ...state, sessions: { ...state.sessions, [msg.session_id]: next } }
     }
@@ -126,6 +162,11 @@ function onWatcher(state: AppState, msg: WatcherMsg): AppState {
       const session: SessionView = {
         ...prev,
         touched,
+        // Reads arrive once, at start; edits count when they finish.
+        timeline:
+          msg.kind === 'read' || msg.phase === 'done'
+            ? extendTimeline(prev.timeline, msg.paths, msg.kind, t, msg.id)
+            : prev.timeline,
         currentFile: { path: msg.paths[0]!, kind: msg.kind, at: t },
       }
       return { ...state, files, sessions: { ...state.sessions, [msg.session_id]: session } }

@@ -60,7 +60,18 @@ export const AGENT_NAMES: Record<Agent, string> = {
   codex: 'Codex',
 }
 
-export type MenuEvent = { kind: 'new-pane'; agent: Agent } | { kind: 'close-pane' } | { kind: 'show-projects' }
+export type MenuEvent =
+  | { kind: 'new-pane'; agent: Agent }
+  | { kind: 'close-pane' }
+  | { kind: 'show-projects' }
+  | { kind: 'focus-pane'; paneId: string }
+
+/** A system notification about one pane; clicking it brings that pane forward. */
+export interface PaneNotice {
+  paneId: string
+  title: string
+  body: string
+}
 
 /** A repository for the project picker. */
 export interface ProjectEntry {
