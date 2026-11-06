@@ -3,6 +3,7 @@ import { AGENT_COLORS, AGENT_NAMES, type Agent, type Clash, type ScanStatus } fr
 import { Banner, sessionNames } from './components/Banner'
 import { ExternalList } from './components/ExternalList'
 import { PaneStack } from './components/PaneStack'
+import { SkillsSheet } from './components/SkillsSheet'
 import { focusPane, type PaneHeader } from './components/TerminalPane'
 import { Toolbar } from './components/Toolbar'
 import { RepoMap } from './map/RepoMap'
@@ -29,6 +30,7 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
   const [state, dispatch] = useReducer(reduce, initialState)
   const [split, setSplit] = useState(0.55)
   const [timeline, setTimeline] = useState<string | null>(null)
+  const [skills, setSkills] = useState(false)
   const [scan, setScan] = useState<ScanStatus>({ state: 'never', at: null })
   const [clashes, setClashes] = useState<Clash[]>([])
   // A request to open a file in the right panel; ``n`` makes a repeat request count.
@@ -63,6 +65,7 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
       window.tandem.onMenu((event) => {
         if (event.kind === 'new-pane') void addPane(event.agent)
         else if (event.kind === 'open-file') openFile(event.path)
+        else if (event.kind === 'show-skills') setSkills(true)
         else if (event.kind === 'focus-pane') {
           if (focusPane(event.paneId)) focused.current = event.paneId
         } else if (event.kind === 'close-pane') {
@@ -145,6 +148,8 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
   const onCloseTimeline = useCallback(() => setTimeline(null), [])
   const onAdd = useCallback((agent: Agent) => void addPane(agent), [addPane])
   const onToggleCalm = useCallback(() => dispatch({ type: 'toggle_calm' }), [])
+  const onShowSkills = useCallback(() => setSkills(true), [])
+  const onHideSkills = useCallback(() => setSkills(false), [])
   const onFocus = useCallback((id: string) => {
     focused.current = id
   }, [])
@@ -169,6 +174,7 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
         onAdd={onAdd}
         onToggleCalm={onToggleCalm}
         onShowProjects={onShowProjects}
+        onShowSkills={onShowSkills}
       />
       <main className="workspace">
         <section className="left" style={{ flexBasis: `${split * 100}%` }}>
@@ -215,6 +221,7 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
           />
         </section>
       </main>
+      {skills && <SkillsSheet onClose={onHideSkills} />}
     </div>
   )
 }

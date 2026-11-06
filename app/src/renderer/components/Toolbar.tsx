@@ -12,10 +12,11 @@ interface Props {
   onAdd: (agent: Agent) => void
   onToggleCalm: () => void
   onShowProjects: () => void
+  onShowSkills: () => void
 }
 
 /** A unified window toolbar: on macOS the traffic lights sit at its left edge. */
-export const Toolbar = memo(function Toolbar({ repoRoot, calm, diagnostics, onAdd, onToggleCalm, onShowProjects }: Props): JSX.Element {
+export const Toolbar = memo(function Toolbar({ repoRoot, calm, diagnostics, onAdd, onToggleCalm, onShowProjects, onShowSkills }: Props): JSX.Element {
   const warnings = diagnostics.filter((d) => d.level === 'warn')
   return (
     <header className="toolbar">
@@ -36,6 +37,10 @@ export const Toolbar = memo(function Toolbar({ repoRoot, calm, diagnostics, onAd
         </span>
       )}
       <Usage />
+      <button className="tool" onClick={onShowSkills} title={`Skills, plugins and MCP servers for both agents (${shortcut('K', true)})`}>
+        <Icon name="spark" />
+        Skills
+      </button>
       <div className="segmented" role="group" aria-label="New pane">
         <button onClick={() => onAdd('claude_code')} title={`New Claude pane (${shortcut('T')})`}>
           <span className="agent-dot" style={{ ['--agent' as string]: AGENT_COLORS.claude_code }} />

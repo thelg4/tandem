@@ -1,6 +1,8 @@
 import type {
   Agent,
+  AgentExtras,
   Clash,
+  ExtrasResult,
   FileBlame,
   FileContents,
   FileEdit,
@@ -9,6 +11,7 @@ import type {
   PaneNotice,
   ProjectList,
   ScanStatus,
+  SkillScope,
   UsageSummary,
   WatcherMsg,
 } from '../shared/protocol'
@@ -29,6 +32,15 @@ export interface TandemBridge {
   /** The latest usage summary (refreshed in the background), or null before the first. */
   usage(): Promise<UsageSummary | null>
   onUsage(cb: (usage: UsageSummary) => void): () => void
+  /** Skills, plugins and MCP servers both agents have installed. */
+  extras(): Promise<AgentExtras>
+  /** Copy a skill the other agent has into ``to``'s skills folder. */
+  copySkill(name: string, scope: SkillScope, to: Agent): Promise<ExtrasResult>
+  /** Pick a folder with the system dialog and install its skills for both agents. */
+  addSkills(scope: SkillScope): Promise<ExtrasResult>
+  /** Remove one agent's copy, after a native confirmation; folders go to the Trash. */
+  removeSkill(name: string, scope: SkillScope, agent: Agent): Promise<ExtrasResult>
+  revealSkill(name: string, scope: SkillScope, agent: Agent): void
   /** A file in the open repository, by repo-relative path; refused outside it. */
   readFile(rel: string): Promise<FileContents>
   /** Successful agent edits to a file from the logs, newest first; null if unavailable. */
