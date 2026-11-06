@@ -1709,3 +1709,206 @@ html:not([data-platform='darwin']) .map {
 .edit.focused {
   box-shadow: 0 0 0 2px var(--accent);
 }
+
+/* Skills and plugins sheet: both agents side by side --------------------------------------- */
+
+.extras {
+  display: flex;
+  flex-direction: column;
+  width: 820px;
+  height: 540px;
+  max-width: calc(100% - 40px);
+  max-height: calc(100% - 90px);
+  padding: 12px 14px;
+  background: var(--popover);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  outline: none;
+}
+
+.extras-top {
+  display: flex;
+  align-items: center;
+  padding-bottom: 10px;
+}
+
+.extras-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--secondary);
+}
+
+.icon-button:hover {
+  background: var(--hover);
+  color: var(--label);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+}
+
+.push.small {
+  height: 20px;
+  padding: 0 8px;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.extras-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.extras h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+.extras h3 .count {
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.extras-empty {
+  margin: 6px 0;
+  color: var(--tertiary);
+}
+
+.skill-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 140px;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+
+.skill-row:not(.skill-head):hover {
+  background: var(--hover);
+}
+
+.skill-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 30px;
+  background: var(--popover);
+  border-bottom: 1px solid var(--separator);
+}
+
+.skill-text,
+.extras-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.skill-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.skill-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--secondary);
+}
+
+.skill-desc.mono {
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.skill-cell {
+  display: flex;
+  align-items: center;
+}
+
+.skill-have {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent);
+}
+
+.skill-have .icon-button {
+  opacity: 0;
+}
+
+.skill-row:hover .skill-have .icon-button {
+  opacity: 1;
+}
+
+.tag {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--secondary);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.tag.warn {
+  color: var(--amber);
+}
+
+.extras-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.extras-item {
+  padding: 6px 6px;
+  border-radius: 6px;
+}
+
+.extras-item.off .skill-name {
+  color: var(--secondary);
+}
+
+.extras-version {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--tertiary);
+}
+
+.extras .picker-foot .segmented button {
+  height: 22px;
+  font-size: 12px;
+}
+
+.extras-foot > .muted:first-child,
+.extras-foot > .picker-error:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

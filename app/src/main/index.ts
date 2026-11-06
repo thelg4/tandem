@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import {
@@ -17,7 +18,9 @@ import {
 } from 'electron'
 import type {
   Agent,
+  AgentExtras,
   Clash,
+  ExtrasResult,
   FileBlame,
   FileContents,
   FileEdit,
@@ -26,12 +29,14 @@ import type {
   PaneNotice,
   ProjectEntry,
   ProjectList,
+  SkillScope,
   WatcherMsg,
 } from '../shared/protocol'
 import { readRepoFile } from './files'
 import { PaneManager } from './panes'
 import { runTandem, runTandemJson } from './python'
 import { ScanScheduler, clashesFromReport } from './scan'
+import { AGENTS, agentHomes, installSkill, listExtras, skillDirs, skillsIn } from './skills'
 import { WatcherBridge } from './watcher'
 
 let win: BrowserWindow | null = null
@@ -146,6 +151,7 @@ function buildMenu(): void {
       label: 'File',
       submenu: [
         { label: 'Open Project…', accelerator: 'CmdOrCtrl+O', click: () => sendMenu({ kind: 'show-projects' }) },
+        { label: 'Skills and Plugins…', accelerator: 'CmdOrCtrl+Shift+K', click: () => sendMenu({ kind: 'show-skills' }) },
         ...(mac ? [] : [{ type: 'separator' } as MenuItemConstructorOptions, { role: 'quit' } as MenuItemConstructorOptions]),
       ],
     },
@@ -395,6 +401,102 @@ async function refreshUsage(): Promise<void> {
   }
 }
 
+const AGENT_LABEL: Record<Agent, string> = { claude_code: 'Claude', codex: 'Codex' }
+
+function isScope(v: unknown): v is SkillScope {
+  return v === 'user' || v === 'project'
+}
+
+function isAgent(v: unknown): v is Agent {
+  return (AGENTS as readonly unknown[]).includes(v)
+}
+
+async function findSkill(name: unknown, scope: unknown) {
+  if (typeof name !== 'string' || !isScope(scope)) return undefined
+  const { skills } = await listExtras(agentHomes(), repoRoot)
+  return skills.find((s) => s.name === name && s.scope === scope)
+}
+
+/** Copy a skill one agent has into the other agent's folder for the same scope. */
+async function copySkill(name: string, scope: SkillScope, to: Agent): Promise<ExtrasResult> {
+  if (!isAgent(to)) return { ok: false, error: 'Unknown agent.' }
+  const skill = await findSkill(name, scope)
+  const from = AGENTS.find((a) => a !== to)!
+  const source = skill?.copies[from]
+  const dir = agentHomesDir(scope, to)
+  if (!skill || !source || !dir) return { ok: false, error: 'That skill is no longer there.' }
+  try {
+    const r = await installSkill(source.path, dir, name)
+    return r === 'exists'
+      ? { ok: false, error: `${AGENT_LABEL[to]} already has a skill called ${name}.` }
+      : { ok: true, message: `Copied ${name} to ${AGENT_LABEL[to]}.` }
+  } catch (err) {
+    return { ok: false, error: `Could not copy ${name}: ${(err as Error).message}` }
+  }
+}
+
+function agentHomesDir(scope: SkillScope, agent: Agent): string | null {
+  return skillDirs(agentHomes(), repoRoot)[scope]?.[agent] ?? null
+}
+
+/** Pick a skill folder (or a folder of skills) and install it for both agents. */
+async function addSkills(scope: SkillScope): Promise<ExtrasResult> {
+  if (!isScope(scope)) return { ok: false, error: 'Unknown scope.' }
+  if (scope === 'project' && !repoRoot) return { ok: false, error: 'Open a project first.' }
+  const options = {
+    title: 'Choose a skill folder',
+    message: 'Choose a folder with a SKILL.md, or a folder of skill folders.',
+    buttonLabel: 'Install',
+    properties: ['openDirectory' as const],
+  }
+  const picked = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+  const path = picked.filePaths[0]
+  if (picked.canceled || !path) return { ok: false, canceled: true }
+  const found = await skillsIn(path)
+  if (found.length === 0) return { ok: false, error: 'No SKILL.md in that folder or the folders inside it.' }
+  const installed: string[] = []
+  const skipped: string[] = []
+  try {
+    for (const { name, path: from } of found) {
+      for (const agent of AGENTS) {
+        const r = await installSkill(from, agentHomesDir(scope, agent)!, name)
+        ;(r === 'installed' ? installed : skipped).push(`${name} (${AGENT_LABEL[agent]})`)
+      }
+    }
+  } catch (err) {
+    return { ok: false, error: `Install stopped: ${(err as Error).message}` }
+  }
+  const parts = []
+  if (installed.length) parts.push(`Installed ${installed.join(', ')}.`)
+  if (skipped.length) parts.push(`Already there, left alone: ${skipped.join(', ')}.`)
+  return { ok: true, message: parts.join(' ') }
+}
+
+/** Remove one agent's copy of a skill: a link is unlinked, a folder goes to the Trash. */
+async function removeSkill(name: string, scope: SkillScope, agent: Agent): Promise<ExtrasResult> {
+  const copy = isAgent(agent) ? (await findSkill(name, scope))?.copies[agent] : undefined
+  if (!copy) return { ok: false, error: 'That skill is no longer there.' }
+  const opts = {
+    type: 'warning' as const,
+    message: `Remove ${name} from ${AGENT_LABEL[agent]}?`,
+    detail: copy.linked
+      ? `${copy.path} is a link; Tandem removes only the link, not what it points to.`
+      : `${copy.path} will be moved to the Trash.`,
+    buttons: ['Remove', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+  }
+  const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+  if (response !== 0) return { ok: false, canceled: true }
+  try {
+    if (copy.linked) await unlink(copy.path)
+    else await shell.trashItem(copy.path)
+    return { ok: true, message: `Removed ${name} from ${AGENT_LABEL[agent]}.` }
+  } catch (err) {
+    return { ok: false, error: `Could not remove ${name}: ${(err as Error).message}` }
+  }
+}
+
 function registerIpc(): void {
   ipcMain.on('ready', () => {
     if (!watcher) return
@@ -439,6 +541,16 @@ function registerIpc(): void {
   ipcMain.handle('file:blame', async (_e, rel: string): Promise<FileBlame | null> => {
     if (!repoRoot || typeof rel !== 'string' || !rel) return null
     return runTandemJson<FileBlame>(app.getAppPath(), ['blame', rel, '--repo', repoRoot])
+  })
+  ipcMain.handle('extras:list', (): Promise<AgentExtras> => listExtras(agentHomes(), repoRoot))
+  ipcMain.handle('skills:copy', (_e, name: string, scope: SkillScope, to: Agent) => copySkill(name, scope, to))
+  ipcMain.handle('skills:add', (_e, scope: SkillScope) => addSkills(scope))
+  ipcMain.handle('skills:remove', (_e, name: string, scope: SkillScope, agent: Agent) => removeSkill(name, scope, agent))
+  ipcMain.on('skills:reveal', (_e, name: string, scope: SkillScope, agent: Agent) => {
+    void findSkill(name, scope).then((s) => {
+      const copy = s?.copies[agent]
+      if (copy) shell.showItemInFolder(copy.path)
+    })
   })
   ipcMain.handle('scan:status', () => scanner?.current() ?? { state: 'never', at: null })
   ipcMain.handle('clashes', () => clashes)

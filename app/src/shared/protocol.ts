@@ -66,6 +66,7 @@ export type MenuEvent =
   | { kind: 'show-projects' }
   | { kind: 'focus-pane'; paneId: string }
   | { kind: 'open-file'; path: string }
+  | { kind: 'show-skills' }
 
 /** A system notification about one pane; clicking it brings that pane forward. */
 export interface PaneNotice {
@@ -194,3 +195,52 @@ export interface ScanStatus {
   /** When the last successful scan finished (ISO). */
   at: string | null
 }
+
+/** Where a skill is installed: the user's home (every project) or this repository. */
+export type SkillScope = 'user' | 'project'
+
+/** One agent's copy of a skill: a folder with a SKILL.md. */
+export interface SkillCopy {
+  path: string
+  /** The folder is a symlink (often managed by another tool). */
+  linked: boolean
+}
+
+/** A skill by name and scope, with whichever agents have it. */
+export interface Skill {
+  name: string
+  scope: SkillScope
+  description: string
+  copies: Partial<Record<Agent, SkillCopy>>
+  /** Both agents have it, but their SKILL.md files differ. */
+  differs: boolean
+}
+
+export interface PluginEntry {
+  agent: Agent
+  /** name@marketplace */
+  id: string
+  name: string
+  marketplace: string | null
+  version: string | null
+  description: string | null
+  enabled: boolean
+}
+
+export interface McpEntry {
+  agent: Agent
+  name: string
+  scope: SkillScope
+  /** The command it runs, or the URL it talks to. */
+  target: string | null
+}
+
+export interface AgentExtras {
+  skills: Skill[]
+  plugins: PluginEntry[]
+  mcp: McpEntry[]
+  /** The skill folders Tandem reads and installs into; project is null without a repository. */
+  dirs: Record<SkillScope, Record<Agent, string> | null>
+}
+
+export type ExtrasResult = { ok: true; message?: string } | { ok: false; canceled?: boolean; error?: string }
