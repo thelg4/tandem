@@ -1,11 +1,14 @@
 import type {
   Agent,
+  Clash,
+  FileBlame,
   FileContents,
   FileEdit,
   MenuEvent,
   OpenResult,
   PaneNotice,
   ProjectList,
+  ScanStatus,
   UsageSummary,
   WatcherMsg,
 } from '../shared/protocol'
@@ -30,6 +33,13 @@ export interface TandemBridge {
   readFile(rel: string): Promise<FileContents>
   /** Successful agent edits to a file from the logs, newest first; null if unavailable. */
   fileEdits(rel: string): Promise<FileEdit[] | null>
+  /** Per-line agent blame from the latest scan, aligned with the file on disk; null if unavailable. */
+  fileBlame(rel: string): Promise<FileBlame | null>
+  scanStatus(): Promise<ScanStatus>
+  onScanStatus(cb: (status: ScanStatus) => void): () => void
+  /** Recent cross-agent reverts, rewrites and removals from the latest scan. */
+  clashes(): Promise<Clash[]>
+  onClashes(cb: (clashes: Clash[]) => void): () => void
   /** Show a system notification unless Tandem is focused or notifications are off. */
   notify(notice: PaneNotice): void
   /** Panes waiting on the user, for the Dock badge; 0 clears it. */

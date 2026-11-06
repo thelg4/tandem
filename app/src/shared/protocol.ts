@@ -65,6 +65,7 @@ export type MenuEvent =
   | { kind: 'close-pane' }
   | { kind: 'show-projects' }
   | { kind: 'focus-pane'; paneId: string }
+  | { kind: 'open-file'; path: string }
 
 /** A system notification about one pane; clicking it brings that pane forward. */
 export interface PaneNotice {
@@ -145,4 +146,51 @@ export interface UsageSummary {
   codex: AgentUsage & {
     limits: { primary: LimitWindow | null; secondary: LimitWindow | null; plan: string | null; at: string } | null
   }
+}
+
+/** One span of lines from `tandem blame --format json`. */
+export interface BlameSpan {
+  /** 1-based first line. */
+  start: number
+  count: number
+  /** agent: an agent edit wrote it; unknown: a commit no log explains; baseline: older than
+   * the analyzed history; changed: on disk but in no scanned log or commit yet. */
+  kind: 'agent' | 'unknown' | 'baseline' | 'changed'
+  evidence: 'verified' | 'supported' | 'ambiguous' | 'unknown' | null
+  agent: Agent | null
+  session_id: string | null
+  edit_id: string | null
+  at: string | null
+  /** First commit with these lines; null while uncommitted. */
+  commit: string | null
+}
+
+export interface FileBlame {
+  path: string
+  lines: number
+  spans: BlameSpan[]
+  scanned_at: string | null
+  edits: number
+  unavailable_edits: number
+  note: string | null
+}
+
+export type ClashLabel = 'exact_revert' | 'partial_revert' | 'rewrite' | 'removal'
+
+/** One agent changed lines another agent wrote, from the latest scan's interactions. */
+export interface Clash {
+  id: string
+  path: string
+  label: ClashLabel
+  lines: number
+  startLine: number
+  evidence: 'verified' | 'supported'
+  original: { agent: Agent; session: string; time: string | null }
+  later: { agent: Agent; session: string; time: string | null }
+}
+
+export interface ScanStatus {
+  state: 'never' | 'scanning' | 'ok' | 'failed'
+  /** When the last successful scan finished (ISO). */
+  at: string | null
 }

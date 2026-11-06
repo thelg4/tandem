@@ -634,6 +634,31 @@ h2 {
   color: var(--red-text);
 }
 
+.banner-row + .banner-row {
+  margin-top: 4px;
+}
+
+.banner-row .banner-link {
+  display: block;
+  width: auto;
+  height: auto;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--label);
+}
+
+.banner-row .banner-link:hover {
+  background: none;
+  text-decoration: underline;
+}
+
+.banner-age {
+  color: var(--secondary);
+}
+
 .external {
   display: flex;
   flex-wrap: wrap;
@@ -1318,11 +1343,13 @@ h2 {
 }
 
 .source {
+  /* One line of code; the blame column sizes its spans in these units. */
+  --source-line: 17px;
   display: flex;
   min-width: max-content;
   font-family: var(--mono);
   font-size: 11.5px;
-  line-height: 1.5;
+  line-height: var(--source-line);
 }
 
 .source pre {
@@ -1579,4 +1606,106 @@ html:not([data-platform='darwin']) .map {
   font-size: 11px;
   color: var(--secondary);
   font-variant-numeric: tabular-nums;
+}
+
+/* Blame ------------------------------------------------------------------------------ */
+
+.blame-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.blame-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.blame-share.s-baseline .agent-dot,
+.blame-share.s-other .agent-dot {
+  background: var(--tertiary);
+}
+
+.blame-col {
+  flex-shrink: 0;
+  width: 132px;
+  margin-right: 4px;
+  font-family: var(--font);
+  font-size: 11px;
+  user-select: none;
+}
+
+.blame-span {
+  position: relative;
+  overflow: hidden;
+  padding-left: 9px;
+  border-top: 1px solid transparent;
+  box-sizing: border-box;
+  color: var(--secondary);
+}
+
+.blame-span + .blame-span {
+  border-top-color: var(--separator);
+}
+
+.blame-span.repeat {
+  border-top-color: transparent;
+}
+
+/* The owner bar: solid for verified, faded for weaker evidence, striped before commit. */
+.blame-span::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--agent, transparent);
+}
+
+.blame-span.k-agent:not(.ev-verified)::before {
+  opacity: 0.45;
+}
+
+.blame-span.k-agent.uncommitted::before {
+  background: repeating-linear-gradient(180deg, var(--agent) 0 3px, transparent 3px 5px);
+}
+
+.blame-span.k-unknown::before,
+.blame-span.k-changed::before {
+  background: repeating-linear-gradient(135deg, var(--tertiary) 0 2px, transparent 2px 4px);
+}
+
+.blame-span.k-changed .blame-label {
+  color: var(--amber);
+}
+
+.blame-span.k-agent .blame-label {
+  color: var(--label);
+}
+
+.blame-span.clickable {
+  cursor: pointer;
+}
+
+.blame-span.clickable:hover {
+  background: var(--hover);
+}
+
+.blame-label {
+  display: block;
+  line-height: calc(var(--source-line) - 1px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edit.focused {
+  box-shadow: 0 0 0 2px var(--accent);
 }

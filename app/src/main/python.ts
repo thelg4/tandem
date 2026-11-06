@@ -19,6 +19,16 @@ export function pythonEnv(appRoot: string): NodeJS.ProcessEnv {
   return env
 }
 
+/** Runs `tandem <args>` for its effect; resolves true when it exits 0. */
+export function runTandem(appRoot: string, args: string[], timeoutMs: number): Promise<boolean> {
+  return new Promise((done) => {
+    execFile(resolvePython(), ['-m', 'tandem', ...args], { env: pythonEnv(appRoot), timeout: timeoutMs }, (err, _out, stderr) => {
+      if (err) console.error(`[tandem ${args[0]}] ${err.message}${stderr ? `\n${stderr}` : ''}`)
+      done(!err)
+    })
+  })
+}
+
 /** Runs a one-shot `tandem <args> --format json`; null when it fails or prints no JSON. */
 export function runTandemJson<T>(appRoot: string, args: string[], timeoutMs = 30_000): Promise<T | null> {
   return new Promise((done) => {
