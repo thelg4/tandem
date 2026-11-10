@@ -88,7 +88,7 @@ class GitReader:
 
     # -- low level -----------------------------------------------------------------
 
-    def run(self, *args: str, check: bool = True) -> GitResult:
+    def run(self, *args: str, check: bool = True, stdin: bytes | None = None) -> GitResult:
         cmd = [self.git, *_HARDENING, *args]
         try:
             proc = subprocess.run(
@@ -98,7 +98,7 @@ class GitReader:
                 capture_output=True,
                 timeout=self.timeout,
                 check=False,
-                stdin=subprocess.DEVNULL,
+                input=stdin if stdin is not None else b"",
             )
         except FileNotFoundError as exc:
             raise GitError(f"git executable not found: {self.git}") from exc
@@ -238,6 +238,52 @@ class GitReader:
         args += [commit.parents[0], commit.oid] if commit.parents else ["--root", commit.oid]
         out = self.run(*args).stdout.decode("utf-8", "surrogateescape")
         return _parse_raw(out)
+
+    def path_deltas(self, commits: list[CommitMeta], path: str) -> dict[str, list[FileDelta]]:
+        """Changes to one path in each commit against its first parent, in one Git call.
+
+        Commits that leave the path alone are absent. Renames are not followed: limited to
+        one path, a rename shows as a deletion or an addition.
+        """
+        if not path or "\0" in path or "\n" in path:
+            raise InvalidInputError("invalid path")
+        if not commits:
+            return {}
+        pairs = "".join(f"{c.oid} {c.parents[0]}\n" if c.parents else f"{c.oid}\n" for c in commits)
+        out = self.run(
+            "diff-tree",
+            "--stdin",
+            "--root",
+            "-r",
+            "-z",
+            "--raw",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--end-of-options",
+            "--",
+            path,
+            stdin=pairs.encode(),
+        ).stdout.decode("utf-8", "surrogateescape")
+        result: dict[str, list[FileDelta]] = {}
+        current: str | None = None
+        chunk: list[str] = []
+        fields = out.split("\0")
+
+        def flush() -> None:
+            if current is not None:
+                deltas = [d for d in _parse_raw("\0".join(chunk)) if d.path == path]
+                if deltas:
+                    result[current] = deltas
+
+        for f in fields:
+            oid = f.strip("\n")
+            if len(oid) in (40, 64) and oid != path and _OID.match(oid):
+                flush()
+                current, chunk = oid, []
+            else:
+                chunk.append(f)
+        flush()
+        return result
 
     def added_lines(self, commit: CommitMeta, include: Callable[[str], bool]) -> int | None:
         """Inserted text lines in ``commit`` for paths ``include`` accepts (coverage denominator).

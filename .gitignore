@@ -30,3 +30,4 @@ tests/fixtures/raw/
 .superpowers/
 app/node_modules/
 app/out/
+app/dist/

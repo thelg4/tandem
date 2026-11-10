@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import GitRunner
 from tandem.errors import GitError, InvalidInputError
 from tandem.git_reader import GitReader
 
@@ -118,3 +119,23 @@ def test_added_lines_by_commit_matches_per_commit(
     totals = {oid: sum(paths.values()) for oid, paths in bulk.items()}
     assert totals == {c.oid: reader.added_lines(c, lambda p: True) for c in history}
     assert bulk[commits[0]] == {"app.py": 2}
+
+
+def test_path_deltas_lists_only_commits_touching_the_path(
+    git_repo: tuple[Path, GitRunner],
+) -> None:
+    repo, git = git_repo
+    (repo / "a.py").write_text("1\n")
+    (repo / "b.py").write_text("1\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "root")
+    (repo / "b.py").write_text("2\n")
+    git("commit", "-qam", "b only")
+    git("rm", "-q", "a.py")
+    git("commit", "-q", "-m", "drop a")
+    reader = GitReader(repo)
+    commits = reader.history(reader.resolve_commit("HEAD"), max_count=10)
+    deltas = reader.path_deltas(commits, "a.py")
+    assert [c.oid in deltas for c in commits] == [True, False, True]
+    assert [d.status for d in deltas[commits[0].oid]] == ["A"]
+    assert deltas[commits[2].oid][0].new_blob is None

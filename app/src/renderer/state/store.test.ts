@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WatcherMsg } from '../../shared/protocol'
 import { getAct, noteBell, noteInput, noteOutput } from './paneActivity'
-import { cellVisual, hasLiveDecay, paneStatus, reuseUnchanged } from './selectors'
+import { activityRows, cellVisual, hasLiveDecay, paneStatus, reuseUnchanged } from './selectors'
 import { initialState, reduce, type AppState } from './store'
 
 const T = Date.parse('2026-11-04T12:00:00.000Z')
@@ -141,5 +141,69 @@ describe('reuseUnchanged', () => {
     expect(out.p1).toBe(prev.p1)
     expect(out.p2).toBe(next.p2)
     expect(reuseUnchanged(out, { ...out })).toBe(out)
+  })
+})
+
+describe('activityRows', () => {
+  it('lists touched and changed files newest first, an edit outranking a read', () => {
+    const read: WatcherMsg = { ...(edit('claude_code:a', 'src/a.py', 0) as object), kind: 'read', tool: 'Read' } as WatcherMsg
+    let s = feed(
+      initialState,
+      session('claude_code:a', 'claude_code', null),
+      session('codex:b', 'codex', null),
+      read,
+      edit('claude_code:a', 'src/a.py', 1000),
+      edit('codex:b', 'src/b.py', 5000),
+    )
+    s = feed(s, { v: 1, type: 'change', path: 'README.md', likely_session: 'codex:b', at: at(3000) })
+    const rows = activityRows(s)
+    expect(rows.map((r) => r.path)).toEqual(['src/b.py', 'README.md', 'src/a.py'])
+    expect(rows[2]!.touches).toEqual([
+      { sessionId: 'claude_code:a', agent: 'claude_code', kind: 'edit', at: T + 1000, external: true },
+    ])
+    expect(rows[1]!.change).toEqual({ at: T + 3000, likelyAgent: 'codex' })
+  })
+})
+
+describe('session timeline', () => {
+  const read = (sid: string, path: string, ms: number): WatcherMsg => ({
+    v: 1,
+    type: 'activity',
+    session_id: sid,
+    kind: 'read',
+    phase: 'start',
+    paths: [path],
+    tool: 'Read',
+    at: at(ms),
+    id: `r${ms}`,
+  })
+  const editId = (path: string, ms: number, phase: 'start' | 'done' | 'failed', id: string): WatcherMsg => ({
+    ...(edit('A', path, ms, phase) as Extract<WatcherMsg, { type: 'activity' }>),
+    id,
+  })
+
+  it('lists reads and finished edits in order, merging repeats', () => {
+    const s = feed(
+      withPane(),
+      read('A', 'a.py', 0),
+      editId('a.py', 1000, 'start', 'e1'),
+      editId('a.py', 2000, 'done', 'e1'),
+      editId('a.py', 3000, 'start', 'e2'),
+      editId('a.py', 4000, 'done', 'e2'),
+      editId('a.py', 4100, 'done', 'e2'), // the same call reported again
+      editId('b.py', 5000, 'failed', 'e3'),
+      read('A', 'a.py', 6000),
+    )
+    expect(s.sessions['A']?.timeline.map((e) => [e.path, e.kind, e.count, e.first - T, e.at - T])).toEqual([
+      ['a.py', 'read', 1, 0, 0],
+      ['a.py', 'edit', 2, 2000, 4100],
+      ['a.py', 'read', 1, 6000, 6000],
+    ])
+  })
+
+  it('keeps the timeline when the session is renamed', () => {
+    let s = feed(withPane(), read('A', 'a.py', 0))
+    s = feed(s, { ...(session('A', 'claude_code', 'p1') as Extract<WatcherMsg, { type: 'session' }>), title: 'New title' })
+    expect(s.sessions['A']?.timeline).toHaveLength(1)
   })
 })

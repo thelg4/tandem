@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
 import type { PaneCommand, WatcherMsg } from '../shared/protocol'
+import { resolvePython } from './agents'
+import { pythonEnv } from './python'
 
 const MAX_QUEUED = 1000
 
@@ -63,13 +63,8 @@ export class WatcherBridge {
   }
 
   private spawnProcess(): void {
-    const python = process.env.TANDEM_PYTHON || 'python3'
-    const src = resolve(this.appRoot, '..', 'src')
-    const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUNBUFFERED: '1' }
-    if (existsSync(join(src, 'tandem'))) {
-      env.PYTHONPATH = env.PYTHONPATH ? `${src}:${env.PYTHONPATH}` : src
-    }
-    const proc = spawn(python, ['-m', 'tandem', 'watch', this.repo], { env, stdio: 'pipe' })
+    const python = resolvePython()
+    const proc = spawn(python, ['-m', 'tandem', 'watch', this.repo], { env: pythonEnv(this.appRoot), stdio: 'pipe' })
     this.proc = proc
     proc.stdout.setEncoding('utf8')
     proc.stdout.on('data', (chunk: string) => this.onData(chunk))

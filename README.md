@@ -104,6 +104,7 @@ tandem scan      # read the logs and Git history (incremental; reruns are fast)
 tandem report    # coverage, attribution, interactions, durability
 tandem explain <interaction-id>
 tandem session <session-id>
+tandem blame <file>   # which agent wrote each line, and how sure Tandem is
 ```
 
 Tandem reads logs from `~/.claude/projects` and `~/.codex/sessions`, honoring `CLAUDE_CONFIG_DIR` and `CODEX_HOME`. `--claude-root` and `--codex-root` override both. It needs Python 3.11+ and Git 2.31+ on macOS or Linux.
@@ -122,7 +123,7 @@ Tandem reads logs from `~/.claude/projects` and `~/.codex/sessions`, honoring `C
 
 ## Live workspace (experimental)
 
-A desktop app that runs the real `claude` and `codex` CLIs in terminal panes. Next to them is a live map of the repository that lights up as each agent reads and edits files. When two sessions edit the same file within two minutes of each other, you get a warning before one overwrites the other.
+A desktop app that runs the real `claude` and `codex` CLIs in terminal panes. Next to them is a live view of the repository that shows each file as an agent reads or edits it, with the diffs of those edits. When two sessions edit the same file within two minutes of each other, you get a warning before one overwrites the other.
 
 ```sh
 pip install -e .                  # the app runs `python3 -m tandem watch`
@@ -130,18 +131,31 @@ cd app && npm install
 TANDEM_REPO=/path/to/repo npm run dev
 ```
 
-- **Panes.** `⌘T` opens a Claude pane and `⇧⌘T` a Codex pane. Each pane is the agent itself, running in your login shell with the repository as its working directory. Type into it exactly as you would in a terminal. A pane follows its agent across `/clear`, `/resume` and `/new`.
+To build a standalone app, run `npm run dist` in `app/`. On macOS that makes `dist/Tandem-<version>-arm64.dmg` and a zipped `Tandem.app`. On Linux it makes an AppImage. The app carries its own copy of the watcher, so it only needs Python 3.11+ as `python3` on your login `PATH`. Opened without `--repo` or `TANDEM_REPO`, it shows your recent projects. The build is unsigned, so on macOS open it the first time with right-click → Open.
+
+The app follows Apple's design language and the system's light or dark appearance. On macOS the title bar folds into the toolbar, the window is translucent and selection uses your accent color. On Linux it uses a normal window frame and solid backgrounds. Linux builds are untested so far.
+
+- **Panes.** `⌘T` opens a Claude pane and `⇧⌘T` a Codex pane (`Ctrl+T` and `Ctrl+Shift+T` on Linux). Each pane is the agent itself, running in your login shell with the repository as its working directory. Type into it exactly as you would in a terminal. A pane follows its agent across `/clear`, `/resume` and `/new`.
 - **Map.** Agent colors: orange for Claude, green for Codex. A fill marks an edit and fades over 90 s to a faint tint. An outline marks a read and fades over 20 s. Amber means two sessions edited the file in the last 15 minutes. A red pulse plus the banner means they edited it within 2 minutes of each other. Grey hatching marks a change that no tool call explains, for example one made by a shell command. **Calm** turns the pulses into static colors.
+- **Projects.** Opened without `--repo` or `TANDEM_REPO`, the app shows your recent projects: the Git repositories where Claude Code or Codex ran in the last 60 days, from their own logs. Click the project name in the toolbar (or press `⌘O`) to switch. `tandem projects` prints the same list.
+- **Files.** **Activity** lists every file an agent read or edited, newest first, with who touched it and when. **Map** shows the whole repository, one equal cell per file. Click a file to open it: **Edits** shows each successful Claude Code and Codex edit to it from the last 7 days as a diff, newest first, read from the agents' own logs; **File** shows its current contents. `tandem edits <file>` prints the same edits.
+- **Blame.** Next to the code, **File** shows who wrote each line. A solid bar means verified (rebuilt exactly from the log and matched in Git), a faded bar means weaker evidence, and a striped bar means not committed yet. "no log" marks lines no agent log explains, such as hand edits and shell commands, and "changed" marks lines changed since the last scan. Click a line to jump to the edit that wrote it. `tandem blame <file>` prints the same.
+- **Clash alerts.** When one agent reverts, rewrites or removes lines the other agent wrote, a banner says so, for example "Codex reverted 4 lines Claude wrote in src/limiter.py", along with a notification if Tandem isn't in front. Click it to see the diffs. Only verified or supported cases from the last hour are shown. Overlaps whose order can't be told apart are left out.
+- **Background scans.** To keep blame and alerts current, the app runs `tandem scan` when a project opens and again about 15 seconds after agents stop editing. It never runs more than one scan at a time. Scans are incremental, and results go to the same private database as a manual `tandem scan`.
+- **Skills for both agents.** The Skills button (⇧⌘K) shows every skill Claude Code and Codex have, side by side, for this project and for all projects. Skills use the same format in both (a folder with a `SKILL.md`), so a skill one agent has can be copied to the other in one click, and **Add Skill for Both…** installs a skill folder (or a folder of them) for both at once. Claude's skills live in `~/.claude/skills` and `.claude/skills`; Codex's in `~/.codex/skills` and `.agents/skills`. Copies never overwrite an existing skill, and removing one moves the folder to the Trash (a symlinked skill is only unlinked). Plugins and MCP servers are listed for each agent too, read-only, since each agent installs those its own way.
+- **Session timeline.** The **N files** button in a pane's header lists what that session edited, newest first; **All** adds the files it read. Repeated edits to one file in a row are merged (×3). Click a file to see its diffs. When the app opens, it starts with the last 15 minutes of each session, then fills in as the agent works.
+- **Notifications.** When a pane starts waiting on you, or an agent goes quiet after at least 20 seconds of work, Tandem sends a system notification, unless it is the window you're using. Click it to jump to that pane. The Dock icon shows how many panes are waiting. Turn this off under **Pane → Notify When an Agent Needs You**.
+- **Usage.** The toolbar shows Claude Code's output tokens today and Codex's fullest plan limit. Click for details: tokens today and over 7 days for both agents, plus Codex's short-window and weekly limits with reset times. Claude Code's logs don't record plan limits, so for Claude only tokens are shown. Codex limits are as of its last session on this computer. `tandem usage` prints the same summary.
 - **Outside the app.** Claude Code and Codex sessions started elsewhere, such as Codex Desktop or an iTerm window, show on the map too, as long as their working directory is in this worktree.
-- **Settings.** `TANDEM_PYTHON` sets the interpreter (default `python3`). `TANDEM_CODEX_BIN` sets the Codex binary (default: `codex` on your login `PATH`, then the copy bundled in ChatGPT.app). `TANDEM_CLAUDE_BIN` sets the Claude binary.
-- **Privacy.** `tandem watch` follows the same rules as `scan`. It reads logs and Git read-only and makes no network requests. No prompt text, diffs or command text leave the watcher. The app loads nothing remote.
+- **Settings.** `TANDEM_PYTHON` sets the interpreter (default: `python3` on your login `PATH`). `TANDEM_CODEX_BIN` sets the Codex binary (default: `codex` on your login `PATH`, then the copy bundled in ChatGPT.app). `TANDEM_CLAUDE_BIN` sets the Claude binary.
+- **Privacy.** `tandem watch` follows the same rules as `scan`. It reads logs and Git read-only and makes no network requests. No prompt text, diffs or command text leave the watcher. Diffs and file contents are read only when you open a file, on your machine, and the app only reads files inside the open repository. The list of projects you opened is kept in the app's data directory (mode 0600). The app loads nothing remote.
 - **Limits.** Reads done through shell commands (`cat`, `grep`) are invisible. Edits made through shell commands appear only as grey "changed" cells. "Needs you" is a heuristic: an open tool call with no terminal output for 1.5 s, or a terminal bell.
 
 ## Privacy
 
 - Results live in a private SQLite database (mode 0600) in your user data directory, outside the repository. It holds diffs of your code and is not encrypted, so treat it as private.
 - Log content is untrusted data. Nothing in it is executed, and terminal control characters are escaped before printing.
-- `report --format json` leaves out prompts and diffs. `explain` and `session` include code from the diffs. Home directories are always written as `~`. `tandem audit` prints structure and counts only.
+- `report --format json` leaves out prompts and diffs. `explain`, `session` and `edits` include code from the diffs. Home directories are always written as `~`. `tandem audit` prints structure and counts only.
 
 ## Limitations
 

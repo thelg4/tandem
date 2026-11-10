@@ -74,6 +74,49 @@ export function cellVisual(state: AppState, path: string, now: number): CellVisu
   return out
 }
 
+export interface ActivityTouch {
+  sessionId: string
+  agent: SessionView['agent'] | null
+  kind: 'read' | 'edit'
+  at: number
+  external: boolean
+}
+
+export interface ActivityRow {
+  path: string
+  at: number
+  /** Latest touch per session, newest first; an edit wins over a read of the same session. */
+  touches: ActivityTouch[]
+  overlap?: 'active' | 'recent'
+  change?: { at: number; likelyAgent: SessionView['agent'] | null }
+}
+
+/** Files the agents touched, plus changes no tool call explains, newest first. */
+export function activityRows(state: AppState, limit = 200): ActivityRow[] {
+  const paths = new Set([...Object.keys(state.files), ...Object.keys(state.changes)])
+  const rows: ActivityRow[] = []
+  for (const path of paths) {
+    const touches: ActivityTouch[] = []
+    for (const [sid, t] of Object.entries(state.files[path] ?? {})) {
+      const s = state.sessions[sid]
+      const base = { sessionId: sid, agent: s?.agent ?? null, external: s?.external ?? false }
+      if (t.edit !== undefined) touches.push({ ...base, kind: 'edit', at: t.edit })
+      else if (t.read !== undefined) touches.push({ ...base, kind: 'read', at: t.read })
+    }
+    touches.sort((a, b) => b.at - a.at)
+    const change = state.changes[path]
+    const row: ActivityRow = { path, at: Math.max(touches[0]?.at ?? 0, change?.at ?? 0), touches }
+    const overlap = state.overlaps[path]
+    if (overlap) row.overlap = overlap.level
+    if (change) {
+      const likely = change.likely ? state.sessions[change.likely] : undefined
+      row.change = { at: change.at, likelyAgent: likely?.agent ?? null }
+    }
+    rows.push(row)
+  }
+  return rows.sort((a, b) => b.at - a.at || a.path.localeCompare(b.path)).slice(0, limit)
+}
+
 export function hasLiveDecay(state: AppState, now: number): boolean {
   if (Object.values(state.overlaps).some((o) => o.level === 'active')) return true
   if (Object.values(state.changes).some((c) => now - c.at < EDIT_FADE_MS)) return true

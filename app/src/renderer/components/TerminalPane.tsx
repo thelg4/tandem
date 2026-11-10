@@ -3,6 +3,8 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
 import { memo, useEffect, useRef } from 'react'
 import { AGENT_COLORS, AGENT_NAMES, type Agent } from '../../shared/protocol'
+import { MONO_FONT, onAppearanceChange, prefersDark, shortcut, terminalTheme } from '../platform'
+import { Icon } from './Icon'
 import { noteBell, noteInput } from '../state/paneActivity'
 import { attach } from '../state/paneData'
 import type { PaneStatus } from '../state/selectors'
@@ -10,6 +12,9 @@ import type { PaneStatus } from '../state/selectors'
 export interface PaneHeader {
   status: PaneStatus
   title: string | null
+  /** The pane's current session and how many files it has touched, for the timeline chip. */
+  sessionId: string | null
+  files: number
   currentFile: { path: string; kind: 'read' | 'edit' } | null
   overlap: { path: string; others: string } | null
 }
@@ -22,6 +27,16 @@ interface Props {
   onFocus: (paneId: string) => void
   onClose: (paneId: string) => void
   onRestart: (paneId: string) => void
+  onTimeline: (sessionId: string) => void
+}
+
+// Terminals register here so a notification click can put the cursor in its pane.
+const focusers = new Map<string, () => void>()
+
+export function focusPane(paneId: string): boolean {
+  const f = focusers.get(paneId)
+  f?.()
+  return f !== undefined
 }
 
 const STATUS_TEXT: Record<PaneStatus, string> = {
@@ -32,7 +47,16 @@ const STATUS_TEXT: Record<PaneStatus, string> = {
   starting: 'starting',
 }
 
-export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, header, onFocus, onClose, onRestart }: Props): JSX.Element {
+export const TerminalPane = memo(function TerminalPane({
+  paneId,
+  agent,
+  exited,
+  header,
+  onFocus,
+  onClose,
+  onRestart,
+  onTimeline,
+}: Props): JSX.Element {
   const host = useRef<HTMLDivElement>(null)
   const exitedRef = useRef(exited)
   exitedRef.current = exited
@@ -43,13 +67,14 @@ export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, 
     const el = host.current
     if (!el) return
     const term = new Terminal({
-      fontFamily: 'Menlo, "SF Mono", ui-monospace, monospace',
-      fontSize: 13,
+      fontFamily: MONO_FONT,
+      fontSize: 12,
+      lineHeight: 1.15,
       cursorBlink: true,
       scrollback: 10_000,
       macOptionIsMeta: true,
       allowProposedApi: true,
-      theme: { background: '#11141a', foreground: '#d5d8de', cursor: AGENT_COLORS[agent] },
+      theme: terminalTheme(prefersDark(), AGENT_COLORS[agent]),
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -79,6 +104,9 @@ export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, 
       noteInput(paneId, Date.now())
       window.tandem.write(paneId, data)
     })
+    const offAppearance = onAppearanceChange((dark) => {
+      term.options.theme = terminalTheme(dark, AGENT_COLORS[agent])
+    })
     const bell = term.onBell(() => noteBell(paneId, Date.now()))
     let frame = 0
     const observer = new ResizeObserver(() => {
@@ -88,11 +116,14 @@ export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, 
     observer.observe(el)
     const focus = (): void => onFocus(paneId)
     term.textarea?.addEventListener('focus', focus)
+    focusers.set(paneId, () => term.focus())
     term.focus()
     return () => {
+      focusers.delete(paneId)
       observer.disconnect()
       cancelAnimationFrame(frame)
       term.textarea?.removeEventListener('focus', focus)
+      offAppearance()
       input.dispose()
       bell.dispose()
       detach()
@@ -103,7 +134,7 @@ export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, 
   }, [paneId, agent])
 
   const color = AGENT_COLORS[agent]
-  const { status, title, currentFile, overlap } = header
+  const { status, title, currentFile, overlap, sessionId, files } = header
   return (
     <div className={`pane ${overlap ? 'pane-overlap' : ''}`} style={{ ['--agent' as string]: color }}>
       <div className="pane-header">
@@ -118,17 +149,27 @@ export const TerminalPane = memo(function TerminalPane({ paneId, agent, exited, 
         )}
         {overlap && (
           <span className="pane-file overlap-text">
-            ⚠ {overlap.others} also editing {overlap.path}
+            {overlap.others} also editing {overlap.path}
           </span>
         )}
-        <button className="pane-close" title="Close pane (⌘W)" onClick={() => onClose(paneId)}>
-          ×
+        {sessionId && files > 0 && (
+          <button
+            className={`pane-files ${currentFile || overlap ? '' : 'push-right'}`}
+            title="Show the files this session read and edited"
+            onClick={() => onTimeline(sessionId)}
+          >
+            <Icon name="list" size={12} />
+            {files} {files === 1 ? 'file' : 'files'}
+          </button>
+        )}
+        <button className="pane-close" title={`Close pane (${shortcut('W')})`} onClick={() => onClose(paneId)}>
+          <Icon name="xmark" size={12} />
         </button>
       </div>
       <div className="pane-body" ref={host} />
       {exited && (
         <div className="pane-exited" onClick={() => onRestart(paneId)}>
-          exited · press Enter to restart
+          <span>Exited · press Return to restart</span>
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 """Command-line interface.
 
-Commands: audit, scan, report, session, explain, doctor, demo.
+Commands: audit, scan, report, session, explain, blame, doctor, demo, and for the live
+workspace watch, projects, edits and usage.
 Exit codes: 0 ok (including a marked partial report), 2 invalid input, 3 unavailable
 data, 4 processing failure. Code 1 marks a command not implemented in this build.
 """
@@ -334,6 +335,184 @@ def cmd_watch(args: argparse.Namespace) -> int:
     )
 
 
+def _roots(args: argparse.Namespace) -> tuple[Path, Path]:
+    claude, codex = resolve_roots(_opt_path(args.claude_root), _opt_path(args.codex_root))
+    return claude.path, codex.path
+
+
+def _home(path: str) -> str:
+    home = str(Path.home())
+    return "~" + path[len(home) :] if path == home or path.startswith(home + "/") else path
+
+
+def _count(n: int) -> str:
+    for unit, size in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
+        if n >= size:
+            return f"{n / size:.1f}{unit}"
+    return str(n)
+
+
+def cmd_projects(args: argparse.Namespace) -> int:
+    from tandem.live.projects import recent_projects
+
+    claude, codex = _roots(args)
+    projects = [p.as_json() for p in recent_projects(claude, codex, days=args.days)]
+    if args.format == "json":
+        print(json.dumps({"projects": projects}))
+        return 0
+    if not projects:
+        print(f"No agent sessions in a Git repository in the last {args.days} days.")
+    for p in projects:
+        sessions = p["sessions"]
+        assert isinstance(sessions, dict)
+        counts = ", ".join(f"{agent} {n}" for agent, n in sorted(sessions.items()))
+        print(f"{p['last_active']}  {_home(str(p['path']))}  ({counts})")
+    return 0
+
+
+def cmd_usage(args: argparse.Namespace) -> int:
+    from tandem.live.usage import usage_summary
+
+    claude, codex = _roots(args)
+    summary = usage_summary(claude, codex)
+    if args.format == "json":
+        print(json.dumps(summary))
+        return 0
+    for agent, name in (("claude_code", "Claude Code"), ("codex", "Codex")):
+        u = summary[agent]
+        assert isinstance(u, dict)
+        today, week = u["today"], u["week"]
+        print(
+            f"{name}: today {_count(today['output'])} out / {_count(today['input'])} in; "
+            f"7 days {_count(week['output'])} out / {_count(week['input'])} in"
+        )
+    codex_usage = summary["codex"]
+    assert isinstance(codex_usage, dict)
+    limits = codex_usage.get("limits")
+    if isinstance(limits, dict):
+        for key, label in (("primary", "Codex short window"), ("secondary", "Codex weekly")):
+            w = limits.get(key)
+            if isinstance(w, dict):
+                print(f"{label}: {w['used_percent']:.0f}% used, resets {w['resets_at']}")
+        print(f"  (as of {limits['at']})")
+    return 0
+
+
+def cmd_edits(args: argparse.Namespace) -> int:
+    from tandem.live.edits import file_edits
+    from tandem.live.protocol import iso
+    from tandem.report.views import safe
+
+    top = _git_for(args.repo).discover().top_level
+    target = Path(args.file)
+    if target.is_absolute():
+        try:
+            target = target.resolve().relative_to(top)
+        except ValueError as exc:
+            raise InvalidInputError(f"{args.file} is not inside {top}") from exc
+    rel = target.as_posix()
+    claude, codex = _roots(args)
+    edits = file_edits(top, rel, claude, codex, days=args.days, limit=args.limit)
+    if args.format == "json":
+        print(json.dumps({"path": rel, "edits": [e.as_json() for e in edits]}))
+        return 0
+    if not edits:
+        print(f"No agent edits to {rel} in the last {args.days} days.")
+    for e in edits:
+        who = "Claude Code" if e.agent == "claude_code" else "Codex"
+        print(
+            f"{iso(e.at)}  {who}  {e.tool} ({e.change})" + (f"  {safe(e.title)}" if e.title else "")
+        )
+        for h in e.hunks:
+            where = f"@@ -{h.old_start} +{h.new_start} @@" if h.new_start is not None else "@@"
+            print(f"  {where}")
+            for line in h.lines:
+                print(f"  {safe(line)}")
+    return 0
+
+
+def cmd_sessions(args: argparse.Namespace) -> int:
+    from tandem.live.sessions import history
+    from tandem.report.views import safe
+
+    top = _git_for(args.repo).discover().top_level
+    claude, codex = _roots(args)
+    sessions = history(top, claude, codex, days=args.days, limit=args.limit)
+    if args.format == "json":
+        print(json.dumps({"sessions": [s.as_json() for s in sessions]}))
+        return 0
+    if not sessions:
+        print(f"No agent sessions in {top} in the last {args.days} days.")
+    for s in sessions:
+        who = "Claude Code" if s.agent == "claude_code" else "Codex"
+        data = s.as_json()
+        print(f"{data['last_active']}  {who:<11}  {s.raw_id}  {safe(s.title or '')}")
+    return 0
+
+
+_WHO = {"claude_code": "Claude Code", "codex": "Codex"}
+
+
+def cmd_blame(args: argparse.Namespace) -> int:
+    from tandem.attribution.blame import blame_file
+    from tandem.report.views import safe
+
+    git = _git_for(args.repo)
+    info = git.discover()
+    top = info.top_level
+    target = Path(args.file)
+    if target.is_absolute():
+        try:
+            target = target.resolve().relative_to(top.resolve())
+        except ValueError as exc:
+            raise InvalidInputError(f"{args.file} is not inside {top}") from exc
+    rel = target.as_posix()
+    if rel.startswith("../") or rel == "..":
+        raise InvalidInputError(f"{args.file} is not inside {top}")
+    policy = load_policy(top, {})
+    file = top / rel
+    if not file.is_file():
+        raise InvalidInputError(f"{rel} is not a file in the working tree")
+    data = file.read_bytes()
+    if len(data) > policy.max_blob_bytes or b"\0" in data[:8192]:
+        raise InvalidInputError(f"{rel} is binary or larger than max_blob_bytes")
+    text = data.decode("utf-8", "surrogateescape")
+    path = _db_path(args, info.common_dir)
+    if not path.exists():
+        _err("tandem: no scan yet for this repository; run `tandem scan` first")
+        return int(ExitCode.UNAVAILABLE)
+    conn = db.connect(path, readonly=True)
+    try:
+        row = conn.execute(
+            "SELECT repo_id FROM repositories WHERE common_git_dir = ?", (str(info.common_dir),)
+        ).fetchone()
+        if row is None:
+            _err("tandem: no scan yet for this repository; run `tandem scan` first")
+            return int(ExitCode.UNAVAILABLE)
+        result = blame_file(conn, git, row["repo_id"], rel, text, policy)
+    finally:
+        conn.close()
+    if args.format == "json":
+        print(json.dumps(result.to_json()))
+        return 0
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+    width = len(str(len(lines)))
+    for span in result.spans:
+        if span.kind == "agent":
+            who = f"{_WHO.get(span.agent or '', span.agent)} ({span.evidence})"
+            if span.commit is None:
+                who += " uncommitted"
+        else:
+            who = {"baseline": "before history", "changed": "not in any log yet"}.get(
+                span.kind, "no log explains"
+            )
+        for n in range(span.start, span.start + span.count):
+            print(f"{who:<34} {n:>{width}}  {safe(lines[n - 1])}")
+    if result.note:
+        _err(f"tandem: {result.note.replace('_', ' ')}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tandem",
@@ -408,6 +587,47 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
     p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
     p.set_defaults(func=cmd_watch)
+
+    p = sub.add_parser("projects", help="list Git repositories where agent sessions ran recently")
+    p.add_argument("--days", type=int, default=60, help="look back this many days (default 60)")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_projects)
+
+    p = sub.add_parser("edits", help="show each agent edit to one file, from the agents' logs")
+    p.add_argument("file", help="file path, relative to the repository or absolute")
+    p.add_argument("--repo", default=".", metavar="PATH", help="repository (default: .)")
+    p.add_argument("--days", type=int, default=7, help="look back this many days (default 7)")
+    p.add_argument("--limit", type=int, default=50, help="at most this many edits (default 50)")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_edits)
+
+    p = sub.add_parser("sessions", help="list the agent sessions that ran in a repository")
+    p.add_argument("--repo", default=".", metavar="PATH", help="repository (default: .)")
+    p.add_argument("--days", type=int, default=30, help="look back this many days (default 30)")
+    p.add_argument(
+        "--limit", type=int, default=200, help="at most this many sessions (default 200)"
+    )
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_sessions)
+
+    p = sub.add_parser("blame", help="show which agent wrote each line of a file")
+    p.add_argument("file", help="file path, relative to the repository or absolute")
+    p.add_argument("--repo", default=".", metavar="PATH", help="repository (default: .)")
+    p.add_argument("--db", metavar="PATH", help="database path (default: per-user data dir)")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.set_defaults(func=cmd_blame)
+
+    p = sub.add_parser("usage", help="token usage today and this week, and Codex plan limits")
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_usage)
 
     return parser
 

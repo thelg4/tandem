@@ -1,6 +1,8 @@
 import { createRoot } from 'react-dom/client'
-import { App } from './App'
+import { Root } from './Root'
+import { installAppearance } from './platform'
 import '@xterm/xterm/css/xterm.css'
 import './styles.css'
 
-createRoot(document.getElementById('root')!).render(<App />)
+installAppearance()
+createRoot(document.getElementById('root')!).render(<Root />)

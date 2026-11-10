@@ -10,13 +10,16 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "postinstall": "electron-rebuild -f -w node-pty"
+    "postinstall": "electron-rebuild -f -w node-pty",
+    "dist": "electron-vite build && electron-builder",
+    "icon": "node resources/make-icon.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.10.0",
     "@xterm/addon-webgl": "0.18.0",
     "@xterm/xterm": "5.5.0",
     "d3-hierarchy": "3.1.2",
+    "highlight.js": "11.12.0",
     "node-pty": "1.0.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
@@ -28,9 +31,55 @@
     "@types/react": "18.3.23",
     "@types/react-dom": "18.3.7",
     "electron": "37.10.3",
+    "electron-builder": "26.18.0",
     "electron-vite": "4.0.1",
     "typescript": "5.8.3",
     "vite": "6.4.5",
     "vitest": "3.2.4"
+  },
+  "author": "Thel Gunter",
+  "build": {
+    "appId": "dev.tandem.live",
+    "productName": "Tandem",
+    "directories": {
+      "buildResources": "resources",
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/node-pty/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../src/tandem",
+        "to": "python/tandem",
+        "filter": [
+          "**/*.py",
+          "**/*.sql",
+          "!**/__pycache__/**"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "resources/icon.png",
+      "darkModeSupport": true,
+      "identity": null
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development",
+      "icon": "resources/icon.png",
+      "synopsis": "Claude Code and Codex side by side, with a live map of what each touches"
+    }
   }
 }

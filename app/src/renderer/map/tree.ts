@@ -23,7 +23,7 @@ export interface Rect {
 }
 
 /** Children of ``dir`` (``''`` is the root): files, plus directories expanded or collapsed. */
-export function buildLevel(files: TreeFile[], dir: string, collapseOver = 40): MapNode[] {
+export function buildLevel(files: TreeFile[], dir: string, collapseOver = 80): MapNode[] {
   const prefix = dir ? `${dir}/` : ''
   const own: MapNode[] = []
   const groups = new Map<string, TreeFile[]>()
@@ -52,7 +52,7 @@ export function buildLevel(files: TreeFile[], dir: string, collapseOver = 40): M
     if (list.length <= collapseOver) node.children = buildLevel(list, path, collapseOver)
     own.push(node)
   }
-  return own.sort((a, b) => b.size - a.size || a.path.localeCompare(b.path))
+  return own.sort((a, b) => b.descendants.length - a.descendants.length || a.path.localeCompare(b.path))
 }
 
 interface Root {
@@ -60,13 +60,13 @@ interface Root {
   children: MapNode[]
 }
 
-/** Square-root of bytes, so a lockfile does not swallow the map; never zero. */
+/**
+ * Every file gets the same area and a directory one per file inside it. Sizing by bytes
+ * let one lockfile swallow its folder and squeezed source files to unreadable slivers;
+ * equal cells keep names legible and match how agents work, file by file.
+ */
 function weight(node: MapNode): number {
-  return node.isDir
-    ? node.descendants.length > 0
-      ? Math.sqrt(Math.max(node.size, 1)) * Math.sqrt(node.descendants.length)
-      : 1
-    : Math.sqrt(Math.max(node.size, 1))
+  return node.isDir ? Math.max(1, node.descendants.length) : 1
 }
 
 /** Squarified treemap; leaves are files and collapsed directories. */

@@ -4,11 +4,13 @@ import type { Agent } from '../shared/protocol'
 
 const CODEX_APP_BUNDLE = '/Applications/ChatGPT.app/Contents/Resources/codex'
 
-export function loginShell(): string {
-  return process.env.SHELL || '/bin/zsh'
+/** The user's shell; when $SHELL is unset, the platform's default login shell. */
+export function loginShell(platform: NodeJS.Platform = process.platform): string {
+  return process.env.SHELL || (platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
 }
 
-function onLoginPath(bin: string): string | null {
+/** Where `bin` is on the login PATH. An app opened from the Dock or a desktop launcher has a bare PATH. */
+export function onLoginPath(bin: string): string | null {
   try {
     const out = execFileSync(loginShell(), ['-l', '-c', `command -v ${bin}`], {
       encoding: 'utf8',
@@ -32,16 +34,28 @@ export function resolveCodex(): string {
   return codexCache
 }
 
+let pythonCache: string | null = null
+
+/** TANDEM_PYTHON, then `python3` on the login PATH, then plain `python3`. */
+export function resolvePython(): string {
+  if (process.env.TANDEM_PYTHON) return process.env.TANDEM_PYTHON
+  pythonCache ??= onLoginPath('python3') || 'python3'
+  return pythonCache
+}
+
 export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`
 }
 
-export function agentCommand(agent: Agent, claudeSessionId?: string): string {
+/** The agent's command line; ``resume`` continues an existing session instead of a new one. */
+export function agentCommand(agent: Agent, claudeSessionId?: string, resume?: string): string {
   if (agent === 'claude_code') {
     const bin = process.env.TANDEM_CLAUDE_BIN || 'claude'
+    if (resume) return `${shellQuote(bin)} --resume ${shellQuote(resume)}`
     return `${shellQuote(bin)} --session-id ${shellQuote(claudeSessionId ?? '')}`
   }
-  return shellQuote(resolveCodex())
+  const codex = shellQuote(resolveCodex())
+  return resume ? `${codex} resume ${shellQuote(resume)}` : codex
 }
 
 // Variables a running agent sets for its own children. A pane launched from inside a
