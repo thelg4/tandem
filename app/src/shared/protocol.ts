@@ -45,6 +45,8 @@ export type PaneCommand =
       agent: Agent
       pid: number
       claude_session_id?: string
+      /** Set when the pane resumes an existing Codex session. */
+      codex_session_id?: string
       spawned_at: string
     }
   | { type: 'pane_exited'; pane_id: string; at: string }
@@ -67,6 +69,7 @@ export type MenuEvent =
   | { kind: 'focus-pane'; paneId: string }
   | { kind: 'open-file'; path: string }
   | { kind: 'show-skills' }
+  | { kind: 'toggle-sidebar' }
 
 /** A system notification about one pane; clicking it brings that pane forward. */
 export interface PaneNotice {
@@ -119,6 +122,20 @@ export interface FileEdit {
   user_modified: boolean
   truncated: boolean
   hunks: EditHunk[]
+}
+
+/** One past or present agent session in this repository, from `tandem sessions --format json`. */
+export interface HistoryEntry {
+  /** agent:raw_id, the same key the watcher uses. */
+  session_id: string
+  agent: Agent
+  /** The agent's own id, which its resume command takes. */
+  raw_id: string
+  title: string | null
+  started: string
+  last_active: string
+  /** A live process has it open (Claude Code only; Codex keeps no such record). */
+  running: boolean
 }
 
 export type OpenResult = { ok: true } | { ok: false; canceled?: boolean; error?: string }

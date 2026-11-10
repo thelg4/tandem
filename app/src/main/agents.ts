@@ -47,12 +47,15 @@ export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`
 }
 
-export function agentCommand(agent: Agent, claudeSessionId?: string): string {
+/** The agent's command line; ``resume`` continues an existing session instead of a new one. */
+export function agentCommand(agent: Agent, claudeSessionId?: string, resume?: string): string {
   if (agent === 'claude_code') {
     const bin = process.env.TANDEM_CLAUDE_BIN || 'claude'
+    if (resume) return `${shellQuote(bin)} --resume ${shellQuote(resume)}`
     return `${shellQuote(bin)} --session-id ${shellQuote(claudeSessionId ?? '')}`
   }
-  return shellQuote(resolveCodex())
+  const codex = shellQuote(resolveCodex())
+  return resume ? `${codex} resume ${shellQuote(resume)}` : codex
 }
 
 // Variables a running agent sets for its own children. A pane launched from inside a

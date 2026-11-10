@@ -160,6 +160,30 @@ def test_codex_cli_rollout_binds_to_pane(git_repo: tuple[Path, GitRunner], tmp_p
     assert sessions[-1]["pane_id"] == "p2" and sessions[-1]["external"] is False
 
 
+def test_resumed_codex_session_binds_to_its_pane(
+    git_repo: tuple[Path, GitRunner], tmp_path: Path
+) -> None:
+    repo = _repo(git_repo)
+    # The rollout started long before the pane, so only the resumed id can bind it.
+    _codex_patch_log(tmp_path / "codex" / "sessions" / "r.jsonl", repo, originator="codex_cli_rs")
+    msgs = _run(
+        repo,
+        tmp_path,
+        [
+            {
+                "type": "pane_started",
+                "pane_id": "p3",
+                "agent": "codex",
+                "pid": 6,
+                "codex_session_id": "CX",
+                "spawned_at": iso(time.time() + 3600),
+            }
+        ],
+    )
+    sessions = [m for m in msgs if m["type"] == "session" and m["session_id"] == "codex:CX"]
+    assert sessions[-1]["pane_id"] == "p3" and sessions[-1]["external"] is False
+
+
 def test_claude_pane_follows_registry(git_repo: tuple[Path, GitRunner], tmp_path: Path) -> None:
     repo = _repo(git_repo)
     new = "99999999-2222-3333-4444-555555555555"

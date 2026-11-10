@@ -3,11 +3,13 @@ import { AGENT_COLORS, AGENT_NAMES, type Agent, type Clash, type ScanStatus } fr
 import { Banner, sessionNames } from './components/Banner'
 import { ExternalList } from './components/ExternalList'
 import { PaneStack } from './components/PaneStack'
+import { Sidebar } from './components/Sidebar'
 import { SkillsSheet } from './components/SkillsSheet'
 import { focusPane, type PaneHeader } from './components/TerminalPane'
 import { Toolbar } from './components/Toolbar'
 import { RepoMap } from './map/RepoMap'
 import { shortcut } from './platform'
+import type { ChatRow } from './state/history'
 import { paneNotices, type PaneMemory } from './state/notify'
 import { forgetPane, getAct } from './state/paneActivity'
 import { forgetPaneData, installPaneDataListener } from './state/paneData'
@@ -15,6 +17,15 @@ import { hasLiveDecay, paneSession, paneStatus, reuseUnchanged } from './state/s
 import { initialState, reduce } from './state/store'
 
 const MAP_IDLE_TICK_MS = 30_000
+const SIDEBAR_KEY = 'tandem.sidebar'
+
+function storedSidebar(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
 
 /** Re-render on a clock: 4 fps while something fades or a pane is live, else 1 fps. */
 function useNow(fast: boolean): number {
@@ -31,6 +42,10 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
   const [split, setSplit] = useState(0.55)
   const [timeline, setTimeline] = useState<string | null>(null)
   const [skills, setSkills] = useState(false)
+  const [sidebar, setSidebar] = useState(storedSidebar)
+  const [focusedPane, setFocusedPane] = useState<string | null>(null)
+  const resuming = useRef(new Set<string>())
+  const workspace = useRef<HTMLElement>(null)
   const [scan, setScan] = useState<ScanStatus>({ state: 'never', at: null })
   const [clashes, setClashes] = useState<Clash[]>([])
   // A request to open a file in the right panel; ``n`` makes a repeat request count.
@@ -40,9 +55,20 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
   const panesRef = useRef(state.panes)
   panesRef.current = state.panes
 
-  const addPane = useCallback(async (agent: Agent) => {
-    const { paneId } = await window.tandem.createPane(agent)
+  const addPane = useCallback(async (agent: Agent, resume?: string) => {
+    const { paneId } = await window.tandem.createPane(agent, resume)
     dispatch({ type: 'pane_added', paneId, agent })
+  }, [])
+
+  const toggleSidebar = useCallback(() => {
+    setSidebar((on) => {
+      try {
+        localStorage.setItem(SIDEBAR_KEY, on ? '0' : '1')
+      } catch {
+        // Storage unavailable; the choice lasts this session.
+      }
+      return !on
+    })
   }, [])
 
   const closePane = useCallback((paneId: string) => {
@@ -66,8 +92,12 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
         if (event.kind === 'new-pane') void addPane(event.agent)
         else if (event.kind === 'open-file') openFile(event.path)
         else if (event.kind === 'show-skills') setSkills(true)
+        else if (event.kind === 'toggle-sidebar') toggleSidebar()
         else if (event.kind === 'focus-pane') {
-          if (focusPane(event.paneId)) focused.current = event.paneId
+          if (focusPane(event.paneId)) {
+          focused.current = event.paneId
+          setFocusedPane(event.paneId)
+        }
         } else if (event.kind === 'close-pane') {
           const target = focused.current ?? panesRef.current.at(-1)?.paneId
           if (target) closePane(target)
@@ -79,7 +109,7 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
     void window.tandem.clashes().then(setClashes)
     window.tandem.ready()
     return () => offs.forEach((off) => off())
-  }, [addPane, closePane, openFile])
+  }, [addPane, closePane, openFile, toggleSidebar])
 
   const live = state.panes.some((p) => !p.exited)
   const decaying = hasLiveDecay(state, Date.now())
@@ -152,11 +182,37 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
   const onHideSkills = useCallback(() => setSkills(false), [])
   const onFocus = useCallback((id: string) => {
     focused.current = id
+    setFocusedPane(id)
   }, [])
+
+  // A chat in the sidebar: bring its pane forward, or resume it in a new one.
+  const onOpenChat = useCallback(
+    (row: ChatRow) => {
+      if (row.paneId) {
+        if (focusPane(row.paneId)) onFocus(row.paneId)
+        return
+      }
+      if (row.elsewhere || !row.rawId || resuming.current.has(row.key)) return
+      resuming.current.add(row.key)
+      void addPane(row.agent, row.rawId).finally(() => {
+        // The watcher binds the session to its pane within a poll or two.
+        setTimeout(() => resuming.current.delete(row.key), 5000)
+      })
+    },
+    [addPane, onFocus],
+  )
+
+  const statuses = useMemo(
+    () => Object.fromEntries(Object.entries(headers).map(([id, h]) => [id, h.status])),
+    [headers],
+  )
 
   const startSplit = (e: ReactPointerEvent<HTMLDivElement>): void => {
     e.preventDefault()
-    const move = (ev: PointerEvent): void => setSplit(Math.min(0.8, Math.max(0.25, ev.clientX / window.innerWidth)))
+    const box = workspace.current?.getBoundingClientRect()
+    if (!box) return
+    const move = (ev: PointerEvent): void =>
+      setSplit(Math.min(0.8, Math.max(0.25, (ev.clientX - box.left) / box.width)))
     const up = (): void => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
@@ -170,57 +226,64 @@ export function App({ onShowProjects }: { onShowProjects: () => void }): JSX.Ele
       <Toolbar
         repoRoot={state.repoRoot}
         calm={state.calm}
+        sidebar={sidebar}
         diagnostics={state.diagnostics}
         onAdd={onAdd}
         onToggleCalm={onToggleCalm}
+        onToggleSidebar={toggleSidebar}
         onShowProjects={onShowProjects}
         onShowSkills={onShowSkills}
       />
-      <main className="workspace">
-        <section className="left" style={{ flexBasis: `${split * 100}%` }}>
-          {state.panes.length === 0 ? (
-            <div className="empty-panes">
-              <h2>No agents running</h2>
-              <p className="muted">Start Claude Code or Codex in this repository.</p>
-              <div>
-                <button className="push big" onClick={() => void addPane('claude_code')}>
-                  <span className="agent-dot" style={{ ['--agent' as string]: AGENT_COLORS.claude_code }} />
-                  New Claude Pane
-                </button>
-                <button className="push big" onClick={() => void addPane('codex')}>
-                  <span className="agent-dot" style={{ ['--agent' as string]: AGENT_COLORS.codex }} />
-                  New Codex Pane
-                </button>
+      <div className="body">
+        {sidebar && (
+          <Sidebar state={state} now={now} statuses={statuses} focusedPane={focusedPane} onOpen={onOpenChat} />
+        )}
+        <main className="workspace" ref={workspace}>
+          <section className="left" style={{ flexBasis: `${split * 100}%` }}>
+            {state.panes.length === 0 ? (
+              <div className="empty-panes">
+                <h2>No agents running</h2>
+                <p className="muted">Start Claude Code or Codex in this repository.</p>
+                <div>
+                  <button className="push big" onClick={() => void addPane('claude_code')}>
+                    <span className="agent-dot" style={{ ['--agent' as string]: AGENT_COLORS.claude_code }} />
+                    New Claude Pane
+                  </button>
+                  <button className="push big" onClick={() => void addPane('codex')}>
+                    <span className="agent-dot" style={{ ['--agent' as string]: AGENT_COLORS.codex }} />
+                    New Codex Pane
+                  </button>
+                </div>
+                <p className="hint">
+                  <kbd>{shortcut('T')}</kbd> Claude · <kbd>{shortcut('T', true)}</kbd> Codex · <kbd>{shortcut('W')}</kbd> close
+                </p>
               </div>
-              <p className="hint">
-                <kbd>{shortcut('T')}</kbd> Claude · <kbd>{shortcut('T', true)}</kbd> Codex · <kbd>{shortcut('W')}</kbd> close
-              </p>
-            </div>
-          ) : (
-            <PaneStack
-              panes={state.panes}
-              headers={headers}
-              onFocus={onFocus}
-              onClose={closePane}
-              onRestart={restartPane}
-              onTimeline={onTimeline}
+            ) : (
+              <PaneStack
+                panes={state.panes}
+                headers={headers}
+                onFocus={onFocus}
+                onClose={closePane}
+                onRestart={restartPane}
+                onTimeline={onTimeline}
+              />
+            )}
+          </section>
+          <div className="divider-v" onPointerDown={startSplit} />
+          <section className="right">
+            <Banner state={state} clashes={clashes} now={mapNow} onOpen={openFile} />
+            <ExternalList state={state} />
+            <RepoMap
+              state={state}
+              now={mapNow}
+              session={timeline}
+              onCloseSession={onCloseTimeline}
+              openRequest={openRequest}
+              scan={scan}
             />
-          )}
-        </section>
-        <div className="divider-v" onPointerDown={startSplit} />
-        <section className="right">
-          <Banner state={state} clashes={clashes} now={mapNow} onOpen={openFile} />
-          <ExternalList state={state} />
-          <RepoMap
-            state={state}
-            now={mapNow}
-            session={timeline}
-            onCloseSession={onCloseTimeline}
-            openRequest={openRequest}
-            scan={scan}
-          />
-        </section>
-      </main>
+          </section>
+        </main>
+      </div>
       {skills && <SkillsSheet onClose={onHideSkills} />}
     </div>
   )
