@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { AGENT_COLORS, type Agent } from '../../shared/protocol'
-import { shortcut } from '../platform'
+import { isMac, shortcut } from '../platform'
 import type { Diag } from '../state/store'
 import { Icon } from './Icon'
 import { Usage } from './Usage'
@@ -8,18 +8,38 @@ import { Usage } from './Usage'
 interface Props {
   repoRoot: string | null
   calm: boolean
+  sidebar: boolean
   diagnostics: Diag[]
   onAdd: (agent: Agent) => void
   onToggleCalm: () => void
+  onToggleSidebar: () => void
   onShowProjects: () => void
   onShowSkills: () => void
 }
 
 /** A unified window toolbar: on macOS the traffic lights sit at its left edge. */
-export const Toolbar = memo(function Toolbar({ repoRoot, calm, diagnostics, onAdd, onToggleCalm, onShowProjects, onShowSkills }: Props): JSX.Element {
+export const Toolbar = memo(function Toolbar({
+  repoRoot,
+  calm,
+  sidebar,
+  diagnostics,
+  onAdd,
+  onToggleCalm,
+  onToggleSidebar,
+  onShowProjects,
+  onShowSkills,
+}: Props): JSX.Element {
   const warnings = diagnostics.filter((d) => d.level === 'warn')
   return (
     <header className="toolbar">
+      <button
+        className={`tool icon-only ${sidebar ? 'on' : ''}`}
+        aria-pressed={sidebar}
+        onClick={onToggleSidebar}
+        title={`${sidebar ? 'Hide' : 'Show'} chat history (${isMac ? '⌃⌘S' : 'Ctrl+Shift+S'})`}
+      >
+        <Icon name="sidebar" />
+      </button>
       <button className="toolbar-title" onClick={onShowProjects} aria-label={`Switch project (${shortcut('O')})`}>
         <span className="title">
           {repoRoot ? repoRoot.split('/').pop() : 'Connecting…'}
