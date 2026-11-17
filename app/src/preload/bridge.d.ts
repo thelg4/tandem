@@ -6,6 +6,7 @@ import type {
   FileBlame,
   FileContents,
   FileEdit,
+  HistoryEntry,
   MenuEvent,
   OpenResult,
   PaneNotice,
@@ -58,7 +59,10 @@ export interface TandemBridge {
   setBadge(count: number): void
   /** Start the watcher once the renderer is listening, so no early message is lost. */
   ready(): void
-  createPane(agent: Agent): Promise<{ paneId: string }>
+  /** Start an agent; ``resume`` (the agent's own session id) continues that session. */
+  createPane(agent: Agent, resume?: string): Promise<{ paneId: string }>
+  /** This repository's agent sessions from the logs, newest first; null if unavailable. */
+  sessions(): Promise<HistoryEntry[] | null>
   write(paneId: string, data: string): void
   resize(paneId: string, cols: number, rows: number): void
   kill(paneId: string): void

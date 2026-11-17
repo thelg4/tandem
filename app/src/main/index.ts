@@ -24,6 +24,7 @@ import type {
   FileBlame,
   FileContents,
   FileEdit,
+  HistoryEntry,
   MenuEvent,
   OpenResult,
   PaneNotice,
@@ -178,7 +179,26 @@ function buildMenu(): void {
       label: 'Edit',
       submenu: [{ role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }],
     },
-    { role: 'viewMenu' },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Chat History',
+          accelerator: mac ? 'Ctrl+Cmd+S' : 'CmdOrCtrl+Shift+S',
+          click: () => sendMenu({ kind: 'toggle-sidebar' }),
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
     { role: 'windowMenu' },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
@@ -558,7 +578,16 @@ function registerIpc(): void {
     if (Date.now() - usageAt > 15_000) void refreshUsage()
     return usage
   })
-  ipcMain.handle('pane:create', (_e, agent: Agent) => ({ paneId: panes!.create(agent) }))
+  ipcMain.handle('pane:create', (_e, agent: Agent, resume?: string) => {
+    // A session id from the logs; anything else starts a fresh session.
+    const id = typeof resume === 'string' && /^[A-Za-z0-9-]{1,100}$/.test(resume) ? resume : undefined
+    return { paneId: panes!.create(agent, id) }
+  })
+  ipcMain.handle('sessions:list', async (): Promise<HistoryEntry[] | null> => {
+    if (!repoRoot) return null
+    const out = await runTandemJson<{ sessions: HistoryEntry[] }>(app.getAppPath(), ['sessions', '--repo', repoRoot])
+    return out?.sessions ?? null
+  })
   ipcMain.handle('pane:restart', (_e, paneId: string) => panes!.restart(paneId))
   ipcMain.on('pane:write', (_e, paneId: string, data: string) => panes?.write(paneId, data))
   ipcMain.on('pane:resize', (_e, paneId: string, cols: number, rows: number) =>

@@ -431,6 +431,25 @@ def cmd_edits(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sessions(args: argparse.Namespace) -> int:
+    from tandem.live.sessions import history
+    from tandem.report.views import safe
+
+    top = _git_for(args.repo).discover().top_level
+    claude, codex = _roots(args)
+    sessions = history(top, claude, codex, days=args.days, limit=args.limit)
+    if args.format == "json":
+        print(json.dumps({"sessions": [s.as_json() for s in sessions]}))
+        return 0
+    if not sessions:
+        print(f"No agent sessions in {top} in the last {args.days} days.")
+    for s in sessions:
+        who = "Claude Code" if s.agent == "claude_code" else "Codex"
+        data = s.as_json()
+        print(f"{data['last_active']}  {who:<11}  {s.raw_id}  {safe(s.title or '')}")
+    return 0
+
+
 _WHO = {"claude_code": "Claude Code", "codex": "Codex"}
 
 
@@ -585,6 +604,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
     p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
     p.set_defaults(func=cmd_edits)
+
+    p = sub.add_parser("sessions", help="list the agent sessions that ran in a repository")
+    p.add_argument("--repo", default=".", metavar="PATH", help="repository (default: .)")
+    p.add_argument("--days", type=int, default=30, help="look back this many days (default 30)")
+    p.add_argument(
+        "--limit", type=int, default=200, help="at most this many sessions (default 200)"
+    )
+    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--claude-root", metavar="DIR", help="Claude Code transcript root")
+    p.add_argument("--codex-root", metavar="DIR", help="Codex rollout root")
+    p.set_defaults(func=cmd_sessions)
 
     p = sub.add_parser("blame", help="show which agent wrote each line of a file")
     p.add_argument("file", help="file path, relative to the repository or absolute")

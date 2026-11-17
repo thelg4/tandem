@@ -5,6 +5,8 @@ import { agentCommand, loginShell, paneEnv } from './agents'
 
 interface Pane {
   agent: Agent
+  /** The agent session the pane resumed, kept so a restart resumes it again. */
+  resume?: string
   proc: pty.IPty
   lastInputSent: number
   started: PaneCommand
@@ -26,15 +28,16 @@ export class PaneManager {
     private readonly sink: PaneSink,
   ) {}
 
-  create(agent: Agent): string {
+  /** A new pane; with ``resume`` (the agent's own session id) it continues that session. */
+  create(agent: Agent, resume?: string): string {
     const paneId = `p${++this.counter}`
-    this.spawn(paneId, agent)
+    this.spawn(paneId, agent, resume)
     return paneId
   }
 
   restart(paneId: string): void {
     const pane = this.panes.get(paneId)
-    if (pane) this.spawn(paneId, pane.agent)
+    if (pane) this.spawn(paneId, pane.agent, pane.resume)
   }
 
   write(paneId: string, data: string): void {
@@ -67,10 +70,10 @@ export class PaneManager {
     for (const id of [...this.panes.keys()]) this.kill(id)
   }
 
-  private spawn(paneId: string, agent: Agent): void {
-    const claudeSessionId = agent === 'claude_code' ? randomUUID() : undefined
+  private spawn(paneId: string, agent: Agent, resume?: string): void {
+    const claudeSessionId = agent === 'claude_code' ? (resume ?? randomUUID()) : undefined
     const env = paneEnv(process.env)
-    const proc = pty.spawn(loginShell(), ['-l', '-c', `exec ${agentCommand(agent, claudeSessionId)}`], {
+    const proc = pty.spawn(loginShell(), ['-l', '-c', `exec ${agentCommand(agent, claudeSessionId, resume)}`], {
       name: 'xterm-256color',
       cols: 100,
       rows: 30,
@@ -83,9 +86,10 @@ export class PaneManager {
       agent,
       pid: proc.pid,
       ...(claudeSessionId ? { claude_session_id: claudeSessionId } : {}),
+      ...(agent === 'codex' && resume ? { codex_session_id: resume } : {}),
       spawned_at: new Date().toISOString(),
     }
-    this.panes.set(paneId, { agent, proc, lastInputSent: 0, started })
+    this.panes.set(paneId, { agent, resume, proc, lastInputSent: 0, started })
     proc.onData((data) => this.sink.data(paneId, data))
     proc.onExit(({ exitCode }) => {
       // A restart replaces the pty; only report the exit of the current one.

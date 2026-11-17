@@ -122,8 +122,12 @@ class Watcher:
             pane = _Pane(pane_id, str(cmd["agent"]), pid if isinstance(pid, int) else 0, spawned)
             self.panes[pane_id] = pane
             claude_sid = cmd.get("claude_session_id")
+            codex_sid = cmd.get("codex_session_id")
             if pane.agent == "claude_code" and isinstance(claude_sid, str):
                 self._bind(pane, f"claude_code:{claude_sid}")
+            elif pane.agent == "codex" and isinstance(codex_sid, str) and codex_sid:
+                # A resumed Codex session: its rollout predates the pane.
+                self._bind(pane, f"codex:{codex_sid}")
             elif pane.agent == "codex":
                 self._adopt_codex(pane)
             self.discover()
